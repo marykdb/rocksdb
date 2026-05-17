@@ -2373,8 +2373,13 @@ int main(int argc, char** argv) {
     db = rocksdb_open(db_options, dbname, &err);
     rocksdb_column_family_handle_t* cfh;
     cfh = rocksdb_create_column_family(db, db_options, "cf1", &err);
-    rocksdb_column_family_handle_destroy(cfh);
     CheckNoError(err);
+    rocksdb_column_family_handle_t* duplicate_cfh =
+        rocksdb_create_column_family(db, db_options, "cf1", &err);
+    CheckCondition(duplicate_cfh == NULL);
+    CheckCondition(err != NULL);
+    Free(&err);
+    rocksdb_column_family_handle_destroy(cfh);
     rocksdb_close(db);
 
     size_t cflen;
@@ -4526,6 +4531,12 @@ int main(int argc, char** argv) {
     cfh = rocksdb_transactiondb_create_column_family(txn_db, options,
                                                      "txn_db_cf", &err);
     CheckNoError(err);
+    rocksdb_column_family_handle_t* duplicate_cfh =
+        rocksdb_transactiondb_create_column_family(txn_db, options, "txn_db_cf",
+                                                   &err);
+    CheckCondition(duplicate_cfh == NULL);
+    CheckCondition(err != NULL);
+    Free(&err);
 
     rocksdb_transactiondb_put_cf(txn_db, woptions, cfh, "cf_foo", 6, "cf_hello",
                                  8, &err);
@@ -5762,6 +5773,51 @@ int main(int argc, char** argv) {
                                          &ttl_err);
     CheckNoError(ttl_err);
     rocksdb_t* ttl_base = rocksdb_ttl_get_base_db(ttl_db);
+    CheckCondition(ttl_base != NULL);
+    rocksdb_drop_column_family(ttl_base, ttl_handle, &ttl_err);
+    CheckNoError(ttl_err);
+    rocksdb_close(ttl_base);
+    rocksdb_column_family_handle_destroy(ttl_handle);
+    rocksdb_ttl_close(ttl_db);
+    rocksdb_destroy_db(ttl_options, ttl_path, &ttl_err);
+    CheckNoError(ttl_err);
+
+    snprintf(ttl_path, sizeof(ttl_path), "%s/rocksdb_c_test-%d-ttl-base",
+             GetTempDir(), (int)geteuid());
+    rocksdb_t* ttl_base_db =
+        rocksdb_open_with_ttl(ttl_options, ttl_path, 5, &ttl_err);
+    CheckNoError(ttl_err);
+    rocksdb_column_family_handle_t* ttl_base_handle =
+        rocksdb_create_column_family_with_ttl(ttl_base_db, ttl_cf_options,
+                                              "ttl_base_cf", 5, &ttl_err);
+    CheckNoError(ttl_err);
+    rocksdb_column_family_handle_t* duplicate_ttl_base_handle =
+        rocksdb_create_column_family_with_ttl(ttl_base_db, ttl_cf_options,
+                                              "ttl_base_cf", 5, &ttl_err);
+    CheckCondition(duplicate_ttl_base_handle == NULL);
+    CheckCondition(ttl_err != NULL);
+    Free(&ttl_err);
+    rocksdb_drop_column_family(ttl_base_db, ttl_base_handle, &ttl_err);
+    CheckNoError(ttl_err);
+    rocksdb_column_family_handle_destroy(ttl_base_handle);
+    rocksdb_close(ttl_base_db);
+    rocksdb_destroy_db(ttl_options, ttl_path, &ttl_err);
+    CheckNoError(ttl_err);
+
+    snprintf(ttl_path, sizeof(ttl_path), "%s/rocksdb_c_test-%d-ttl-wrapper",
+             GetTempDir(), (int)geteuid());
+    ttl_db = rocksdb_ttl_open(ttl_options, ttl_path, 5, 0, &ttl_err);
+    CheckNoError(ttl_err);
+    ttl_handle = rocksdb_ttl_create_column_family(ttl_db, ttl_cf_options,
+                                                  "ttl_cf", 5, &ttl_err);
+    CheckNoError(ttl_err);
+    rocksdb_column_family_handle_t* duplicate_ttl_handle =
+        rocksdb_ttl_create_column_family(ttl_db, ttl_cf_options, "ttl_cf", 5,
+                                         &ttl_err);
+    CheckCondition(duplicate_ttl_handle == NULL);
+    CheckCondition(ttl_err != NULL);
+    Free(&ttl_err);
+    ttl_base = rocksdb_ttl_get_base_db(ttl_db);
     CheckCondition(ttl_base != NULL);
     rocksdb_drop_column_family(ttl_base, ttl_handle, &ttl_err);
     CheckNoError(ttl_err);

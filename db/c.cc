@@ -1914,10 +1914,14 @@ void rocksdb_list_column_families_destroy(char** list, size_t len) {
 rocksdb_column_family_handle_t* rocksdb_create_column_family(
     rocksdb_t* db, const rocksdb_options_t* column_family_options,
     const char* column_family_name, char** errptr) {
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr, db->rep->CreateColumnFamily(
+                            ColumnFamilyOptions(column_family_options->rep),
+                            std::string(column_family_name), &cf_handle))) {
+    return nullptr;
+  }
   rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
-  SaveError(errptr, db->rep->CreateColumnFamily(
-                        ColumnFamilyOptions(column_family_options->rep),
-                        std::string(column_family_name), &(handle->rep)));
+  handle->rep = cf_handle;
   handle->immortal = false;
   return handle;
 }
@@ -1958,10 +1962,15 @@ rocksdb_column_family_handle_t* rocksdb_create_column_family_with_ttl(
     const char* column_family_name, int ttl, char** errptr) {
   ROCKSDB_NAMESPACE::DBWithTTL* db_with_ttl =
       static_cast<ROCKSDB_NAMESPACE::DBWithTTL*>(db->rep);
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr,
+                db_with_ttl->CreateColumnFamilyWithTtl(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name), &cf_handle, ttl))) {
+    return nullptr;
+  }
   rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
-  SaveError(errptr, db_with_ttl->CreateColumnFamilyWithTtl(
-                        ColumnFamilyOptions(column_family_options->rep),
-                        std::string(column_family_name), &(handle->rep), ttl));
+  handle->rep = cf_handle;
   handle->immortal = false;
   return handle;
 }
@@ -1969,10 +1978,15 @@ rocksdb_column_family_handle_t* rocksdb_create_column_family_with_ttl(
 rocksdb_column_family_handle_t* rocksdb_ttl_create_column_family(
     rocksdb_ttl_t* db, rocksdb_options_t* column_family_options,
     const char* column_family_name, int ttl, char** errptr) {
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr,
+                db->rep->CreateColumnFamilyWithTtl(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name), &cf_handle, ttl))) {
+    return nullptr;
+  }
   rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
-  SaveError(errptr, db->rep->CreateColumnFamilyWithTtl(
-                        ColumnFamilyOptions(column_family_options->rep),
-                        std::string(column_family_name), &(handle->rep), ttl));
+  handle->rep = cf_handle;
   handle->immortal = false;
   return handle;
 }
@@ -8721,10 +8735,14 @@ rocksdb_column_family_handle_t* rocksdb_transactiondb_create_column_family(
     rocksdb_transactiondb_t* txn_db,
     const rocksdb_options_t* column_family_options,
     const char* column_family_name, char** errptr) {
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr, txn_db->rep->CreateColumnFamily(
+                            ColumnFamilyOptions(column_family_options->rep),
+                            std::string(column_family_name), &cf_handle))) {
+    return nullptr;
+  }
   rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
-  SaveError(errptr, txn_db->rep->CreateColumnFamily(
-                        ColumnFamilyOptions(column_family_options->rep),
-                        std::string(column_family_name), &(handle->rep)));
+  handle->rep = cf_handle;
   handle->immortal = false;
   return handle;
 }

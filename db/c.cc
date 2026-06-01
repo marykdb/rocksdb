@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -227,6 +228,9 @@ struct rocksdb_writebatch_wi_t {
   WriteBatchWithIndex* rep;
   rocksdb_writebatch_t* write_batch;
 };
+struct rocksdb_wbwi_iterator_t {
+  ROCKSDB_NAMESPACE::WBWIIterator* rep;
+};
 struct rocksdb_snapshot_t {
   const Snapshot* rep;
 };
@@ -388,6 +392,7 @@ struct rocksdb_transaction_options_t {
 };
 struct rocksdb_transaction_t {
   Transaction* rep;
+  bool owns_transaction;
 };
 struct rocksdb_backup_engine_options_t {
   BackupEngineOptions rep;
@@ -3030,6 +3035,13 @@ void rocksdb_iter_refresh(const rocksdb_iterator_t* iter, char** errptr) {
   SaveError(errptr, iter->rep->Refresh());
 }
 
+void rocksdb_iter_refresh_snapshot(const rocksdb_iterator_t* iter,
+                                   const rocksdb_snapshot_t* snapshot,
+                                   char** errptr) {
+  SaveError(errptr,
+            iter->rep->Refresh(snapshot == nullptr ? nullptr : snapshot->rep));
+}
+
 rocksdb_writebatch_t* rocksdb_writebatch_create() {
   return new rocksdb_writebatch_t;
 }
@@ -3718,6 +3730,86 @@ void rocksdb_writebatch_wi_rollback_to_save_point(rocksdb_writebatch_wi_t* b,
 void rocksdb_writebatch_wi_pop_save_point(rocksdb_writebatch_wi_t* b,
                                           char** errptr) {
   SaveError(errptr, b->rep->PopSavePoint());
+}
+
+rocksdb_wbwi_iterator_t* rocksdb_writebatch_wi_create_iterator(
+    rocksdb_writebatch_wi_t* wbwi) {
+  rocksdb_wbwi_iterator_t* result = new rocksdb_wbwi_iterator_t;
+  result->rep = wbwi->rep->NewIterator();
+  return result;
+}
+
+rocksdb_wbwi_iterator_t* rocksdb_writebatch_wi_create_iterator_cf(
+    rocksdb_writebatch_wi_t* wbwi,
+    rocksdb_column_family_handle_t* column_family) {
+  rocksdb_wbwi_iterator_t* result = new rocksdb_wbwi_iterator_t;
+  result->rep = wbwi->rep->NewIterator(column_family->rep);
+  return result;
+}
+
+void rocksdb_wbwi_iterator_destroy(rocksdb_wbwi_iterator_t* iter) {
+  delete iter->rep;
+  delete iter;
+}
+
+unsigned char rocksdb_wbwi_iterator_valid(const rocksdb_wbwi_iterator_t* iter) {
+  return iter->rep->Valid();
+}
+
+void rocksdb_wbwi_iterator_seek_to_first(rocksdb_wbwi_iterator_t* iter) {
+  iter->rep->SeekToFirst();
+}
+
+void rocksdb_wbwi_iterator_seek_to_last(rocksdb_wbwi_iterator_t* iter) {
+  iter->rep->SeekToLast();
+}
+
+void rocksdb_wbwi_iterator_seek(rocksdb_wbwi_iterator_t* iter, const char* key,
+                                size_t klen) {
+  iter->rep->Seek(Slice(key, klen));
+}
+
+void rocksdb_wbwi_iterator_seek_for_prev(rocksdb_wbwi_iterator_t* iter,
+                                         const char* key, size_t klen) {
+  iter->rep->SeekForPrev(Slice(key, klen));
+}
+
+void rocksdb_wbwi_iterator_next(rocksdb_wbwi_iterator_t* iter) {
+  iter->rep->Next();
+}
+
+void rocksdb_wbwi_iterator_prev(rocksdb_wbwi_iterator_t* iter) {
+  iter->rep->Prev();
+}
+
+void rocksdb_wbwi_iterator_status(const rocksdb_wbwi_iterator_t* iter,
+                                  char** errptr) {
+  SaveError(errptr, iter->rep->status());
+}
+
+int rocksdb_wbwi_iterator_entry_type(const rocksdb_wbwi_iterator_t* iter) {
+  return static_cast<int>(iter->rep->Entry().type);
+}
+
+const char* rocksdb_wbwi_iterator_entry_key(const rocksdb_wbwi_iterator_t* iter,
+                                            size_t* klen) {
+  ROCKSDB_NAMESPACE::WriteEntry entry = iter->rep->Entry();
+  *klen = entry.key.size();
+  return entry.key.data();
+}
+
+const char* rocksdb_wbwi_iterator_entry_value(
+    const rocksdb_wbwi_iterator_t* iter, size_t* vlen) {
+  ROCKSDB_NAMESPACE::WriteEntry entry = iter->rep->Entry();
+  if (entry.type == ROCKSDB_NAMESPACE::kDeleteRecord ||
+      entry.type == ROCKSDB_NAMESPACE::kSingleDeleteRecord ||
+      entry.type == ROCKSDB_NAMESPACE::kDeleteRangeRecord ||
+      entry.type == ROCKSDB_NAMESPACE::kLogDataRecord) {
+    *vlen = 0;
+    return nullptr;
+  }
+  *vlen = entry.value.size();
+  return entry.value.data();
 }
 
 rocksdb_iterator_t* rocksdb_writebatch_wi_create_iterator_with_base(
@@ -4663,6 +4755,21 @@ void rocksdb_options_set_comparator(rocksdb_options_t* opt,
 void rocksdb_options_set_merge_operator(
     rocksdb_options_t* opt, rocksdb_mergeoperator_t* merge_operator) {
   opt->rep.merge_operator = std::shared_ptr<MergeOperator>(merge_operator);
+}
+
+void rocksdb_options_set_merge_operator_name(rocksdb_options_t* opt,
+                                             const char* name, size_t name_len,
+                                             char** errptr) {
+  std::string merge_operator_name(name, name_len);
+  std::shared_ptr<MergeOperator> merge_operator =
+      ROCKSDB_NAMESPACE::MergeOperators::CreateFromStringId(
+          merge_operator_name);
+  if (merge_operator == nullptr) {
+    SaveError(errptr, Status::InvalidArgument("Unknown merge operator name: " +
+                                              merge_operator_name));
+    return;
+  }
+  opt->rep.merge_operator = merge_operator;
 }
 
 void rocksdb_options_set_create_if_missing(rocksdb_options_t* opt,
@@ -6872,6 +6979,21 @@ void rocksdb_lru_cache_options_set_num_shard_bits(
   opt->rep.num_shard_bits = num_shard_bits;
 }
 
+void rocksdb_lru_cache_options_set_strict_capacity_limit(
+    rocksdb_lru_cache_options_t* opt, unsigned char strict_capacity_limit) {
+  opt->rep.strict_capacity_limit = strict_capacity_limit;
+}
+
+void rocksdb_lru_cache_options_set_high_pri_pool_ratio(
+    rocksdb_lru_cache_options_t* opt, double high_pri_pool_ratio) {
+  opt->rep.high_pri_pool_ratio = high_pri_pool_ratio;
+}
+
+void rocksdb_lru_cache_options_set_low_pri_pool_ratio(
+    rocksdb_lru_cache_options_t* opt, double low_pri_pool_ratio) {
+  opt->rep.low_pri_pool_ratio = low_pri_pool_ratio;
+}
+
 void rocksdb_lru_cache_options_set_memory_allocator(
     rocksdb_lru_cache_options_t* opt, rocksdb_memory_allocator_t* allocator) {
   opt->rep.memory_allocator = allocator->rep;
@@ -8841,6 +8963,19 @@ rocksdb_t* rocksdb_transactiondb_get_base_db(rocksdb_transactiondb_t* txn_db) {
   return nullptr;
 }
 
+rocksdb_transaction_t* rocksdb_transactiondb_get_transaction_by_name(
+    rocksdb_transactiondb_t* txn_db, const char* name, size_t name_len) {
+  Transaction* txn = txn_db->rep->GetTransactionByName(
+      ROCKSDB_NAMESPACE::TransactionName(name, name_len));
+  if (txn == nullptr) {
+    return nullptr;
+  }
+  rocksdb_transaction_t* result = new rocksdb_transaction_t;
+  result->rep = txn;
+  result->owns_transaction = false;
+  return result;
+}
+
 void rocksdb_transactiondb_close_base_db(rocksdb_t* base_db) {
   if (base_db != nullptr) {
     rocksdb_close(base_db);
@@ -8856,6 +8991,7 @@ rocksdb_transaction_t* rocksdb_transaction_begin(
     rocksdb_transaction_t* result = new rocksdb_transaction_t;
     result->rep = txn_db->rep->BeginTransaction(write_options->rep,
                                                 txn_options->rep, nullptr);
+    result->owns_transaction = true;
     return result;
   }
   old_txn->rep = txn_db->rep->BeginTransaction(write_options->rep,
@@ -8891,6 +9027,7 @@ rocksdb_transaction_t** rocksdb_transactiondb_get_prepared_transactions(
     for (size_t i = 0; i < txns.size(); i++) {
       buf[i] = new rocksdb_transaction_t;
       buf[i]->rep = txns[i];
+      buf[i]->owns_transaction = false;
     }
     return buf;
   }
@@ -9070,7 +9207,13 @@ uint64_t rocksdb_transaction_get_global_id(rocksdb_transaction_t* txn) {
 }
 
 void rocksdb_transaction_destroy(rocksdb_transaction_t* txn) {
-  delete txn->rep;
+  if (txn->owns_transaction) {
+    delete txn->rep;
+  }
+  delete txn;
+}
+
+void rocksdb_transaction_destroy_wrapper(rocksdb_transaction_t* txn) {
   delete txn;
 }
 
@@ -9520,6 +9663,14 @@ void rocksdb_transaction_put_cf(rocksdb_transaction_t* txn,
                                   Slice(val, vlen)));
 }
 
+void rocksdb_transaction_put_cf_assume_tracked(
+    rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
+    const char* key, size_t klen, const char* val, size_t vlen,
+    unsigned char assume_tracked, char** errptr) {
+  SaveError(errptr, txn->rep->Put(column_family->rep, Slice(key, klen),
+                                  Slice(val, vlen), assume_tracked));
+}
+
 void rocksdb_transaction_put_untracked(rocksdb_transaction_t* txn,
                                        const char* key, size_t klen,
                                        const char* val, size_t vlen,
@@ -9585,6 +9736,14 @@ void rocksdb_transaction_merge_cf(rocksdb_transaction_t* txn,
                                     Slice(val, vlen)));
 }
 
+void rocksdb_transaction_merge_cf_assume_tracked(
+    rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
+    const char* key, size_t klen, const char* val, size_t vlen,
+    unsigned char assume_tracked, char** errptr) {
+  SaveError(errptr, txn->rep->Merge(column_family->rep, Slice(key, klen),
+                                    Slice(val, vlen), assume_tracked));
+}
+
 void rocksdb_transaction_merge_untracked(rocksdb_transaction_t* txn,
                                          const char* key, size_t klen,
                                          const char* val, size_t vlen,
@@ -9628,6 +9787,13 @@ void rocksdb_transaction_delete_cf(
     rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
     const char* key, size_t klen, char** errptr) {
   SaveError(errptr, txn->rep->Delete(column_family->rep, Slice(key, klen)));
+}
+
+void rocksdb_transaction_delete_cf_assume_tracked(
+    rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
+    const char* key, size_t klen, unsigned char assume_tracked, char** errptr) {
+  SaveError(errptr, txn->rep->Delete(column_family->rep, Slice(key, klen),
+                                     assume_tracked));
 }
 
 void rocksdb_transaction_delete_untracked(rocksdb_transaction_t* txn,
@@ -9747,6 +9913,204 @@ void rocksdb_transactiondb_set_deadlock_info_buffer_size(
   txn_db->rep->SetDeadlockInfoBufferSize(target_size);
 }
 
+static void rocksdb_key_lock_infos_cleanup(rocksdb_key_lock_info_t* infos,
+                                           size_t count) {
+  if (infos == nullptr) {
+    return;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    free(infos[i].key);
+    free(infos[i].transaction_ids);
+  }
+  free(infos);
+}
+
+rocksdb_key_lock_info_t* rocksdb_transactiondb_get_lock_status_data(
+    rocksdb_transactiondb_t* txn_db, size_t* count) {
+  auto lock_data = txn_db->rep->GetLockStatusData();
+  *count = lock_data.size();
+  if (lock_data.empty()) {
+    return nullptr;
+  }
+  rocksdb_key_lock_info_t* result = static_cast<rocksdb_key_lock_info_t*>(
+      calloc(lock_data.size(), sizeof(rocksdb_key_lock_info_t)));
+  if (result == nullptr) {
+    *count = 0;
+    return nullptr;
+  }
+  size_t index = 0;
+  for (const auto& entry : lock_data) {
+    result[index].column_family_id = entry.first;
+    result[index].key_len = entry.second.key.size();
+    if (result[index].key_len > 0) {
+      result[index].key = static_cast<char*>(malloc(result[index].key_len));
+      if (result[index].key == nullptr) {
+        rocksdb_key_lock_infos_cleanup(result, index + 1);
+        *count = 0;
+        return nullptr;
+      }
+      memcpy(result[index].key, entry.second.key.data(), result[index].key_len);
+    }
+    result[index].transaction_id_count = entry.second.ids.size();
+    if (result[index].transaction_id_count > 0) {
+      result[index].transaction_ids = static_cast<uint64_t*>(
+          calloc(entry.second.ids.size(), sizeof(uint64_t)));
+      if (result[index].transaction_ids == nullptr) {
+        rocksdb_key_lock_infos_cleanup(result, index + 1);
+        *count = 0;
+        return nullptr;
+      }
+    }
+    for (size_t id_index = 0; id_index < entry.second.ids.size(); ++id_index) {
+      result[index].transaction_ids[id_index] = entry.second.ids[id_index];
+    }
+    result[index].exclusive = entry.second.exclusive;
+    ++index;
+  }
+  return result;
+}
+
+uint32_t rocksdb_key_lock_info_column_family_id(
+    const rocksdb_key_lock_info_t* infos, size_t index) {
+  return infos[index].column_family_id;
+}
+
+const char* rocksdb_key_lock_info_key(const rocksdb_key_lock_info_t* infos,
+                                      size_t index, size_t* key_len) {
+  *key_len = infos[index].key_len;
+  return infos[index].key;
+}
+
+size_t rocksdb_key_lock_info_transaction_id_count(
+    const rocksdb_key_lock_info_t* infos, size_t index) {
+  return infos[index].transaction_id_count;
+}
+
+uint64_t rocksdb_key_lock_info_transaction_id(
+    const rocksdb_key_lock_info_t* infos, size_t index, size_t id_index) {
+  return infos[index].transaction_ids[id_index];
+}
+
+unsigned char rocksdb_key_lock_info_exclusive(
+    const rocksdb_key_lock_info_t* infos, size_t index) {
+  return infos[index].exclusive;
+}
+
+void rocksdb_key_lock_infos_destroy(rocksdb_key_lock_info_t* infos,
+                                    size_t count) {
+  rocksdb_key_lock_infos_cleanup(infos, count);
+}
+
+static void rocksdb_deadlock_paths_cleanup(rocksdb_deadlock_path_t* paths,
+                                           size_t count) {
+  if (paths == nullptr) {
+    return;
+  }
+  for (size_t path_index = 0; path_index < count; ++path_index) {
+    for (size_t info_index = 0; info_index < paths[path_index].info_count;
+         ++info_index) {
+      free(paths[path_index].infos[info_index].waiting_key);
+    }
+    free(paths[path_index].infos);
+  }
+  free(paths);
+}
+
+rocksdb_deadlock_path_t* rocksdb_transactiondb_get_deadlock_info_buffer(
+    rocksdb_transactiondb_t* txn_db, size_t* count) {
+  auto paths = txn_db->rep->GetDeadlockInfoBuffer();
+  *count = paths.size();
+  if (paths.empty()) {
+    return nullptr;
+  }
+  rocksdb_deadlock_path_t* result = static_cast<rocksdb_deadlock_path_t*>(
+      calloc(paths.size(), sizeof(rocksdb_deadlock_path_t)));
+  if (result == nullptr) {
+    *count = 0;
+    return nullptr;
+  }
+  for (size_t path_index = 0; path_index < paths.size(); ++path_index) {
+    const auto& path = paths[path_index];
+    result[path_index].info_count = path.path.size();
+    result[path_index].limit_exceeded = path.limit_exceeded;
+    result[path_index].deadlock_time = path.deadlock_time;
+    if (result[path_index].info_count > 0) {
+      result[path_index].infos = static_cast<rocksdb_deadlock_info_t*>(
+          calloc(path.path.size(), sizeof(rocksdb_deadlock_info_t)));
+      if (result[path_index].infos == nullptr) {
+        rocksdb_deadlock_paths_cleanup(result, path_index + 1);
+        *count = 0;
+        return nullptr;
+      }
+    }
+    for (size_t info_index = 0; info_index < path.path.size(); ++info_index) {
+      const auto& info = path.path[info_index];
+      result[path_index].infos[info_index].transaction_id = info.m_txn_id;
+      result[path_index].infos[info_index].column_family_id = info.m_cf_id;
+      result[path_index].infos[info_index].exclusive = info.m_exclusive;
+      result[path_index].infos[info_index].waiting_key_len =
+          info.m_waiting_key.size();
+      if (!info.m_waiting_key.empty()) {
+        result[path_index].infos[info_index].waiting_key =
+            static_cast<char*>(malloc(info.m_waiting_key.size()));
+        if (result[path_index].infos[info_index].waiting_key == nullptr) {
+          rocksdb_deadlock_paths_cleanup(result, path_index + 1);
+          *count = 0;
+          return nullptr;
+        }
+        memcpy(result[path_index].infos[info_index].waiting_key,
+               info.m_waiting_key.data(), info.m_waiting_key.size());
+      }
+    }
+  }
+  return result;
+}
+
+size_t rocksdb_deadlock_path_info_count(const rocksdb_deadlock_path_t* paths,
+                                        size_t path_index) {
+  return paths[path_index].info_count;
+}
+
+unsigned char rocksdb_deadlock_path_limit_exceeded(
+    const rocksdb_deadlock_path_t* paths, size_t path_index) {
+  return paths[path_index].limit_exceeded;
+}
+
+int64_t rocksdb_deadlock_path_deadlock_time(
+    const rocksdb_deadlock_path_t* paths, size_t path_index) {
+  return paths[path_index].deadlock_time;
+}
+
+uint64_t rocksdb_deadlock_info_transaction_id(
+    const rocksdb_deadlock_path_t* paths, size_t path_index,
+    size_t info_index) {
+  return paths[path_index].infos[info_index].transaction_id;
+}
+
+uint32_t rocksdb_deadlock_info_column_family_id(
+    const rocksdb_deadlock_path_t* paths, size_t path_index,
+    size_t info_index) {
+  return paths[path_index].infos[info_index].column_family_id;
+}
+
+unsigned char rocksdb_deadlock_info_exclusive(
+    const rocksdb_deadlock_path_t* paths, size_t path_index,
+    size_t info_index) {
+  return paths[path_index].infos[info_index].exclusive;
+}
+
+const char* rocksdb_deadlock_info_waiting_key(
+    const rocksdb_deadlock_path_t* paths, size_t path_index, size_t info_index,
+    size_t* waiting_key_len) {
+  *waiting_key_len = paths[path_index].infos[info_index].waiting_key_len;
+  return paths[path_index].infos[info_index].waiting_key;
+}
+
+void rocksdb_deadlock_paths_destroy(rocksdb_deadlock_path_t* paths,
+                                    size_t count) {
+  rocksdb_deadlock_paths_cleanup(paths, count);
+}
+
 ROCKSDB_LIBRARY_API uint64_t* rocksdb_transaction_get_waiting_txns(
     rocksdb_transaction_t* txn, uint32_t* column_family_id, char* key,
     size_t key_len, size_t* num_txns) {
@@ -9855,6 +10219,7 @@ rocksdb_transaction_t* rocksdb_optimistictransaction_begin(
     rocksdb_transaction_t* result = new rocksdb_transaction_t;
     result->rep = otxn_db->rep->BeginTransaction(write_options->rep,
                                                  otxn_options->rep, nullptr);
+    result->owns_transaction = true;
     return result;
   }
   old_txn->rep = otxn_db->rep->BeginTransaction(

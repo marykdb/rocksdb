@@ -1664,6 +1664,40 @@ rocksdb_column_family_handle_t* rocksdb_create_column_family_with_import(
   return result;
 }
 
+rocksdb_column_family_handle_t* rocksdb_create_column_family_with_import_list(
+    rocksdb_t* db, const rocksdb_options_t* column_family_options,
+    const char* column_family_name,
+    const rocksdb_import_column_family_options_t* import_options,
+    const rocksdb_export_import_files_metadata_t* const* metadata,
+    size_t metadata_count, char** errptr) {
+  if (metadata_count > 0 && metadata == nullptr) {
+    SaveError(errptr, Status::InvalidArgument("metadata list is null"));
+    return nullptr;
+  }
+
+  std::vector<const ExportImportFilesMetaData*> metadata_list;
+  metadata_list.reserve(metadata_count);
+  for (size_t i = 0; i < metadata_count; ++i) {
+    if (metadata[i] == nullptr || metadata[i]->rep == nullptr) {
+      SaveError(errptr, Status::InvalidArgument("metadata list entry is null"));
+      return nullptr;
+    }
+    metadata_list.push_back(metadata[i]->rep);
+  }
+
+  ColumnFamilyHandle* handle = nullptr;
+  if (SaveError(errptr, db->rep->CreateColumnFamilyWithImport(
+                            ColumnFamilyOptions(column_family_options->rep),
+                            std::string(column_family_name),
+                            import_options->rep, metadata_list, &handle))) {
+    return nullptr;
+  }
+  rocksdb_column_family_handle_t* result = new rocksdb_column_family_handle_t;
+  result->rep = handle;
+  result->immortal = false;
+  return result;
+}
+
 void rocksdb_options_set_uint64add_merge_operator(rocksdb_options_t* opt) {
   opt->rep.merge_operator =
       ROCKSDB_NAMESPACE::MergeOperators::CreateUInt64AddOperator();
@@ -9794,6 +9828,26 @@ void rocksdb_transaction_delete_cf_assume_tracked(
     const char* key, size_t klen, unsigned char assume_tracked, char** errptr) {
   SaveError(errptr, txn->rep->Delete(column_family->rep, Slice(key, klen),
                                      assume_tracked));
+}
+
+void rocksdb_transaction_singledelete(rocksdb_transaction_t* txn,
+                                      const char* key, size_t klen,
+                                      char** errptr) {
+  SaveError(errptr, txn->rep->SingleDelete(Slice(key, klen)));
+}
+
+void rocksdb_transaction_singledelete_cf(
+    rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
+    const char* key, size_t klen, char** errptr) {
+  SaveError(errptr,
+            txn->rep->SingleDelete(column_family->rep, Slice(key, klen)));
+}
+
+void rocksdb_transaction_singledelete_cf_assume_tracked(
+    rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
+    const char* key, size_t klen, unsigned char assume_tracked, char** errptr) {
+  SaveError(errptr, txn->rep->SingleDelete(column_family->rep, Slice(key, klen),
+                                           assume_tracked));
 }
 
 void rocksdb_transaction_delete_untracked(rocksdb_transaction_t* txn,

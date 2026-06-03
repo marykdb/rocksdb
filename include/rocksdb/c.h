@@ -545,6 +545,13 @@ rocksdb_create_column_family_with_import(
     const char* column_family_name,
     const rocksdb_import_column_family_options_t* import_options,
     const rocksdb_export_import_files_metadata_t* metadata, char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
+rocksdb_create_column_family_with_import_list(
+    rocksdb_t* db, const rocksdb_options_t* column_family_options,
+    const char* column_family_name,
+    const rocksdb_import_column_family_options_t* import_options,
+    const rocksdb_export_import_files_metadata_t* const* metadata,
+    size_t metadata_count, char** errptr);
 extern ROCKSDB_LIBRARY_API rocksdb_ttl_t* rocksdb_ttl_open(
     rocksdb_options_t* options, const char* name, int ttl,
     unsigned char read_only, char** errptr);
@@ -3818,6 +3825,17 @@ extern ROCKSDB_LIBRARY_API void rocksdb_transaction_delete_cf(
     rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
     const char* key, size_t klen, char** errptr);
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_delete_cf_assume_tracked(
+    rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
+    const char* key, size_t klen, unsigned char assume_tracked, char** errptr);
+
+extern ROCKSDB_LIBRARY_API void rocksdb_transaction_singledelete(
+    rocksdb_transaction_t* txn, const char* key, size_t klen, char** errptr);
+
+extern ROCKSDB_LIBRARY_API void rocksdb_transaction_singledelete_cf(
+    rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
+    const char* key, size_t klen, char** errptr);
+extern ROCKSDB_LIBRARY_API void
+rocksdb_transaction_singledelete_cf_assume_tracked(
     rocksdb_transaction_t* txn, rocksdb_column_family_handle_t* column_family,
     const char* key, size_t klen, unsigned char assume_tracked, char** errptr);
 

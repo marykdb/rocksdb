@@ -9262,6 +9262,10 @@ const rocksdb_snapshot_t* rocksdb_transaction_get_snapshot(
   return result;
 }
 
+void rocksdb_transaction_snapshot_destroy(const rocksdb_snapshot_t* snapshot) {
+  delete snapshot;
+}
+
 // Read a key inside a transaction
 char* rocksdb_transaction_get(rocksdb_transaction_t* txn,
                               const rocksdb_readoptions_t* options,
@@ -10195,6 +10199,10 @@ ROCKSDB_LIBRARY_API uint64_t* rocksdb_transaction_get_waiting_txns(
     result[i] = txns[i];
   }
   return result;
+}
+
+void rocksdb_transaction_waiting_txns_destroy(uint64_t* transaction_ids) {
+  delete[] transaction_ids;
 }
 
 rocksdb_optimistictransactiondb_t* rocksdb_optimistictransactiondb_open(

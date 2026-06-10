@@ -3643,9 +3643,12 @@ extern ROCKSDB_LIBRARY_API void
 rocksdb_transaction_set_read_timestamp_for_validation(
     rocksdb_transaction_t* txn, uint64_t read_timestamp);
 
-// This snapshot should be freed using rocksdb_free
+// The returned snapshot wrapper should be freed using
+// rocksdb_transaction_snapshot_destroy.
 extern ROCKSDB_LIBRARY_API const rocksdb_snapshot_t*
 rocksdb_transaction_get_snapshot(rocksdb_transaction_t* txn);
+extern ROCKSDB_LIBRARY_API void rocksdb_transaction_snapshot_destroy(
+    const rocksdb_snapshot_t* snapshot);
 
 extern ROCKSDB_LIBRARY_API char* rocksdb_transaction_get(
     rocksdb_transaction_t* txn, const rocksdb_readoptions_t* options,
@@ -3966,6 +3969,8 @@ extern ROCKSDB_LIBRARY_API void rocksdb_deadlock_paths_destroy(
 ROCKSDB_LIBRARY_API uint64_t* rocksdb_transaction_get_waiting_txns(
     rocksdb_transaction_t* txn, uint32_t* column_family_id, char* key,
     size_t key_len, size_t* num_txns);
+extern ROCKSDB_LIBRARY_API void rocksdb_transaction_waiting_txns_destroy(
+    uint64_t* transaction_ids);
 
 extern ROCKSDB_LIBRARY_API rocksdb_optimistictransactiondb_t*
 rocksdb_optimistictransactiondb_open(const rocksdb_options_t* options,

@@ -4466,8 +4466,14 @@ int main(int argc, char** argv) {
     // reuse old transaction
     txn = rocksdb_transaction_begin(txn_db, woptions, txn_options, txn);
 
-    // snapshot
     const rocksdb_snapshot_t* snapshot;
+    rocksdb_transaction_set_snapshot(txn);
+    snapshot = rocksdb_transaction_get_snapshot(txn);
+    CheckCondition(snapshot != NULL);
+    rocksdb_transaction_snapshot_destroy(snapshot);
+    rocksdb_transaction_clear_snapshot(txn);
+
+    // snapshot
     snapshot = rocksdb_transactiondb_create_snapshot(txn_db);
     rocksdb_readoptions_set_snapshot(roptions, snapshot);
 
@@ -4734,6 +4740,14 @@ int main(int argc, char** argv) {
     // get-for-update conflict
     CheckCondition(conflict_err != NULL);
     Free(&conflict_err);
+    {
+      size_t waiting_txn_count = 1;
+      uint64_t* waiting_txns = rocksdb_transaction_get_waiting_txns(
+          txn2, NULL, NULL, 0, &waiting_txn_count);
+      CheckCondition(waiting_txn_count > 0);
+      CheckCondition(waiting_txns != NULL);
+      rocksdb_transaction_waiting_txns_destroy(waiting_txns);
+    }
 
     // commit
     rocksdb_transaction_commit(txn, &err);

@@ -491,6 +491,13 @@ extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_open_column_families(
     const rocksdb_options_t* const* column_family_options,
     rocksdb_column_family_handle_t** column_family_handles, char** errptr);
 
+extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_open_column_families_with_lengths(
+    const rocksdb_options_t* options, const char* name, int num_column_families,
+    const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr);
+
 extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_open_column_families_with_ttl(
     const rocksdb_options_t* options, const char* name, int num_column_families,
     const char* const* column_family_names,
@@ -506,10 +513,28 @@ rocksdb_open_for_read_only_column_families(
     rocksdb_column_family_handle_t** column_family_handles,
     unsigned char error_if_wal_file_exists, char** errptr);
 
+extern ROCKSDB_LIBRARY_API rocksdb_t*
+rocksdb_open_for_read_only_column_families_with_lengths(
+    const rocksdb_options_t* options, const char* name, int num_column_families,
+    const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles,
+    unsigned char error_if_wal_file_exists, char** errptr);
+
 extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_open_as_secondary_column_families(
     const rocksdb_options_t* options, const char* name,
     const char* secondary_path, int num_column_families,
     const char* const* column_family_names,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr);
+
+extern ROCKSDB_LIBRARY_API rocksdb_t*
+rocksdb_open_as_secondary_column_families_with_lengths(
+    const rocksdb_options_t* options, const char* name,
+    const char* secondary_path, int num_column_families,
+    const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
     const rocksdb_options_t* const* column_family_options,
     rocksdb_column_family_handle_t** column_family_handles, char** errptr);
 
@@ -520,10 +545,22 @@ extern ROCKSDB_LIBRARY_API char** rocksdb_list_column_families(
 extern ROCKSDB_LIBRARY_API void rocksdb_list_column_families_destroy(
     char** list, size_t len);
 
+extern ROCKSDB_LIBRARY_API char** rocksdb_list_column_families_with_lengths(
+    const rocksdb_options_t* options, const char* name, size_t* lencf,
+    size_t** column_family_name_lengths, char** errptr);
+extern ROCKSDB_LIBRARY_API void
+rocksdb_list_column_families_with_lengths_destroy(
+    char** list, size_t* column_family_name_lengths, size_t len);
+
 extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
 rocksdb_create_column_family(rocksdb_t* db,
                              const rocksdb_options_t* column_family_options,
                              const char* column_family_name, char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
+rocksdb_create_column_family_with_length(
+    rocksdb_t* db, const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    char** errptr);
 
 extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t**
 rocksdb_create_column_families(rocksdb_t* db,
@@ -540,15 +577,20 @@ rocksdb_create_column_family_with_ttl(
     rocksdb_t* db, const rocksdb_options_t* column_family_options,
     const char* column_family_name, int ttl, char** errptr);
 extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
+rocksdb_create_column_family_with_ttl_and_length(
+    rocksdb_t* db, const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length, int ttl,
+    char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
 rocksdb_create_column_family_with_import(
     rocksdb_t* db, const rocksdb_options_t* column_family_options,
-    const char* column_family_name,
+    const char* column_family_name, size_t column_family_name_length,
     const rocksdb_import_column_family_options_t* import_options,
     const rocksdb_export_import_files_metadata_t* metadata, char** errptr);
 extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
 rocksdb_create_column_family_with_import_list(
     rocksdb_t* db, const rocksdb_options_t* column_family_options,
-    const char* column_family_name,
+    const char* column_family_name, size_t column_family_name_length,
     const rocksdb_import_column_family_options_t* import_options,
     const rocksdb_export_import_files_metadata_t* const* metadata,
     size_t metadata_count, char** errptr);
@@ -558,13 +600,15 @@ extern ROCKSDB_LIBRARY_API rocksdb_ttl_t* rocksdb_ttl_open(
 extern ROCKSDB_LIBRARY_API rocksdb_ttl_t* rocksdb_ttl_open_column_families(
     rocksdb_options_t* options, const char* name, int num_column_families,
     const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
     rocksdb_options_t* const* column_family_options, const int* ttls,
     rocksdb_column_family_handle_t** handles, unsigned char read_only,
     char** errptr);
 extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
 rocksdb_ttl_create_column_family(rocksdb_ttl_t* db,
                                  rocksdb_options_t* column_family_options,
-                                 const char* column_family_name, int ttl,
+                                 const char* column_family_name,
+                                 size_t column_family_name_length, int ttl,
                                  char** errptr);
 extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_ttl_get_base_db(
     rocksdb_ttl_t* db);
@@ -3324,6 +3368,9 @@ extern ROCKSDB_LIBRARY_API int rocksdb_livefiles_count(
     const rocksdb_livefiles_t*);
 extern ROCKSDB_LIBRARY_API const char* rocksdb_livefiles_column_family_name(
     const rocksdb_livefiles_t*, int index);
+extern ROCKSDB_LIBRARY_API const char*
+rocksdb_livefiles_column_family_name_with_length(const rocksdb_livefiles_t*,
+                                                 int index, size_t* len);
 extern ROCKSDB_LIBRARY_API const char* rocksdb_livefiles_name(
     const rocksdb_livefiles_t*, int index);
 extern ROCKSDB_LIBRARY_API const char* rocksdb_livefiles_path(
@@ -3385,6 +3432,9 @@ extern ROCKSDB_LIBRARY_API size_t rocksdb_column_family_metadata_get_file_count(
 
 extern ROCKSDB_LIBRARY_API char* rocksdb_column_family_metadata_get_name(
     rocksdb_column_family_metadata_t* cf_meta);
+extern ROCKSDB_LIBRARY_API char*
+rocksdb_column_family_metadata_get_name_with_length(
+    rocksdb_column_family_metadata_t* cf_meta, size_t* len);
 
 extern ROCKSDB_LIBRARY_API size_t
 rocksdb_column_family_metadata_get_level_count(
@@ -3497,6 +3547,14 @@ rocksdb_transactiondb_open_column_families(
     const rocksdb_options_t* options,
     const rocksdb_transactiondb_options_t* txn_db_options, const char* name,
     int num_column_families, const char* const* column_family_names,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_transactiondb_t*
+rocksdb_transactiondb_open_column_families_with_lengths(
+    const rocksdb_options_t* options,
+    const rocksdb_transactiondb_options_t* txn_db_options, const char* name,
+    int num_column_families, const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
     const rocksdb_options_t* const* column_family_options,
     rocksdb_column_family_handle_t** column_family_handles, char** errptr);
 
@@ -3980,6 +4038,13 @@ extern ROCKSDB_LIBRARY_API rocksdb_optimistictransactiondb_t*
 rocksdb_optimistictransactiondb_open_column_families(
     const rocksdb_options_t* options, const char* name, int num_column_families,
     const char* const* column_family_names,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_optimistictransactiondb_t*
+rocksdb_optimistictransactiondb_open_column_families_with_lengths(
+    const rocksdb_options_t* options, const char* name, int num_column_families,
+    const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
     const rocksdb_options_t* const* column_family_options,
     rocksdb_column_family_handle_t** column_family_handles, char** errptr);
 

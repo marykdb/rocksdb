@@ -1445,9 +1445,9 @@ int main(int argc, char** argv) {
     rocksdb_import_column_family_options_t* import_options =
         rocksdb_import_column_family_options_create();
     rocksdb_column_family_handle_t* cf_import =
-        rocksdb_create_column_family_with_import(db_import, db_options,
-                                                 "cf_import", import_options,
-                                                 export_metadata, &err);
+        rocksdb_create_column_family_with_import(
+            db_import, db_options, "cf_import", strlen("cf_import"),
+            import_options, export_metadata, &err);
     CheckNoError(err);
     rocksdb_import_column_family_options_destroy(import_options);
     rocksdb_export_import_files_metadata_destroy(export_metadata);
@@ -4920,13 +4920,16 @@ int main(int argc, char** argv) {
     rocksdb_list_column_families_destroy(column_fams, cf_len);
 
     const char* cf_names[3] = {"default", "txn_db_cf1", "txn_db_cf2"};
+    const size_t cf_name_lengths[3] = {strlen("default"), strlen("txn_db_cf1"),
+                                       strlen("txn_db_cf2")};
     rocksdb_options_t* cf_options = rocksdb_options_create();
     const rocksdb_options_t* cf_opts[3] = {cf_options, cf_options, cf_options};
 
     rocksdb_options_set_error_if_exists(cf_options, 0);
     rocksdb_column_family_handle_t* cf_handles[3];
-    otxn_db = rocksdb_optimistictransactiondb_open_column_families(
-        db_options, dbname, 3, cf_names, cf_opts, cf_handles, &err);
+    otxn_db = rocksdb_optimistictransactiondb_open_column_families_with_lengths(
+        db_options, dbname, 3, cf_names, cf_name_lengths, cf_opts, cf_handles,
+        &err);
     CheckNoError(err);
     rocksdb_transaction_t* txn_cf = rocksdb_optimistictransaction_begin(
         otxn_db, woptions, otxn_options, NULL);
@@ -5783,8 +5786,8 @@ int main(int argc, char** argv) {
     CheckNoError(ttl_err);
     rocksdb_options_t* ttl_cf_options = rocksdb_options_create();
     rocksdb_column_family_handle_t* ttl_handle =
-        rocksdb_ttl_create_column_family(ttl_db, ttl_cf_options, "ttl_cf", 5,
-                                         &ttl_err);
+        rocksdb_ttl_create_column_family(ttl_db, ttl_cf_options, "ttl_cf",
+                                         strlen("ttl_cf"), 5, &ttl_err);
     CheckNoError(ttl_err);
     rocksdb_t* ttl_base = rocksdb_ttl_get_base_db(ttl_db);
     CheckCondition(ttl_base != NULL);
@@ -5822,12 +5825,12 @@ int main(int argc, char** argv) {
              GetTempDir(), (int)geteuid());
     ttl_db = rocksdb_ttl_open(ttl_options, ttl_path, 5, 0, &ttl_err);
     CheckNoError(ttl_err);
-    ttl_handle = rocksdb_ttl_create_column_family(ttl_db, ttl_cf_options,
-                                                  "ttl_cf", 5, &ttl_err);
+    ttl_handle = rocksdb_ttl_create_column_family(
+        ttl_db, ttl_cf_options, "ttl_cf", strlen("ttl_cf"), 5, &ttl_err);
     CheckNoError(ttl_err);
     rocksdb_column_family_handle_t* duplicate_ttl_handle =
-        rocksdb_ttl_create_column_family(ttl_db, ttl_cf_options, "ttl_cf", 5,
-                                         &ttl_err);
+        rocksdb_ttl_create_column_family(ttl_db, ttl_cf_options, "ttl_cf",
+                                         strlen("ttl_cf"), 5, &ttl_err);
     CheckCondition(duplicate_ttl_handle == NULL);
     CheckCondition(ttl_err != NULL);
     Free(&ttl_err);
@@ -5842,6 +5845,128 @@ int main(int argc, char** argv) {
     CheckNoError(ttl_err);
     rocksdb_options_destroy(ttl_cf_options);
     rocksdb_options_destroy(ttl_options);
+
+    char binary_ttl_path[200];
+    snprintf(binary_ttl_path, sizeof(binary_ttl_path),
+             "%s/rocksdb_c_test-%d-binary-ttl", GetTempDir(), (int)geteuid());
+    const char binary_ttl_name[] = {'t', '\0', 't', 'l'};
+    const char* binary_ttl_names[] = {"default", binary_ttl_name};
+    const size_t binary_ttl_lengths[] = {strlen("default"),
+                                         sizeof(binary_ttl_name)};
+    rocksdb_options_t* binary_ttl_options = rocksdb_options_create();
+    rocksdb_options_set_create_if_missing(binary_ttl_options, 1);
+    rocksdb_options_set_create_missing_column_families(binary_ttl_options, 1);
+    const int binary_ttls[] = {5, 5};
+    rocksdb_column_family_handle_t* binary_ttl_handles[2];
+    ttl_db = rocksdb_ttl_open_column_families(
+        binary_ttl_options, binary_ttl_path, 2, binary_ttl_names,
+        binary_ttl_lengths,
+        (rocksdb_options_t* const[]){binary_ttl_options, binary_ttl_options},
+        binary_ttls, binary_ttl_handles, 0, &ttl_err);
+    CheckNoError(ttl_err);
+    rocksdb_column_family_handle_destroy(binary_ttl_handles[0]);
+    rocksdb_column_family_handle_destroy(binary_ttl_handles[1]);
+    rocksdb_ttl_close(ttl_db);
+    rocksdb_destroy_db(binary_ttl_options, binary_ttl_path, &ttl_err);
+    CheckNoError(ttl_err);
+    rocksdb_options_destroy(binary_ttl_options);
+  }
+
+  StartPhase("column_family_binary_names");
+  {
+    char binary_cf_name[] = {'c', '\0', 'f'};
+    char binary_cf_path[200];
+    snprintf(binary_cf_path, sizeof(binary_cf_path),
+             "%s/rocksdb_c_test-%d-binary-cf", GetTempDir(), (int)geteuid());
+    rocksdb_options_t* binary_cf_options = rocksdb_options_create();
+    rocksdb_options_set_create_if_missing(binary_cf_options, 1);
+    char* binary_cf_err = NULL;
+    rocksdb_t* binary_cf_db =
+        rocksdb_open(binary_cf_options, binary_cf_path, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_column_family_handle_t* binary_cf_handle =
+        rocksdb_create_column_family_with_length(
+            binary_cf_db, binary_cf_options, binary_cf_name,
+            sizeof(binary_cf_name), &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_column_family_handle_destroy(binary_cf_handle);
+    rocksdb_close(binary_cf_db);
+
+    const char* binary_cf_open_names[] = {"default", binary_cf_name};
+    const size_t binary_cf_open_name_lengths[] = {strlen("default"),
+                                                  sizeof(binary_cf_name)};
+    const rocksdb_options_t* binary_cf_open_options[] = {binary_cf_options,
+                                                         binary_cf_options};
+    rocksdb_column_family_handle_t* binary_cf_open_handles[2];
+    binary_cf_db = rocksdb_open_column_families_with_lengths(
+        binary_cf_options, binary_cf_path, 2, binary_cf_open_names,
+        binary_cf_open_name_lengths, binary_cf_open_options,
+        binary_cf_open_handles, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[0]);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[1]);
+    rocksdb_close(binary_cf_db);
+
+    rocksdb_transactiondb_options_t* binary_txn_options =
+        rocksdb_transactiondb_options_create();
+    rocksdb_transactiondb_t* binary_txn_db =
+        rocksdb_transactiondb_open_column_families_with_lengths(
+            binary_cf_options, binary_txn_options, binary_cf_path, 2,
+            binary_cf_open_names, binary_cf_open_name_lengths,
+            binary_cf_open_options, binary_cf_open_handles, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[0]);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[1]);
+    rocksdb_transactiondb_close(binary_txn_db);
+    rocksdb_transactiondb_options_destroy(binary_txn_options);
+
+    rocksdb_optimistictransactiondb_t* binary_otxn_db =
+        rocksdb_optimistictransactiondb_open_column_families_with_lengths(
+            binary_cf_options, binary_cf_path, 2, binary_cf_open_names,
+            binary_cf_open_name_lengths, binary_cf_open_options,
+            binary_cf_open_handles, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[0]);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[1]);
+    rocksdb_optimistictransactiondb_close(binary_otxn_db);
+
+    binary_cf_db = rocksdb_open_for_read_only_column_families_with_lengths(
+        binary_cf_options, binary_cf_path, 2, binary_cf_open_names,
+        binary_cf_open_name_lengths, binary_cf_open_options,
+        binary_cf_open_handles, 0, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[0]);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[1]);
+    rocksdb_close(binary_cf_db);
+
+    char binary_cf_secondary_path[200];
+    snprintf(binary_cf_secondary_path, sizeof(binary_cf_secondary_path),
+             "%s/rocksdb_c_test-%d-binary-cf-secondary", GetTempDir(),
+             (int)geteuid());
+    binary_cf_db = rocksdb_open_as_secondary_column_families_with_lengths(
+        binary_cf_options, binary_cf_path, binary_cf_secondary_path, 2,
+        binary_cf_open_names, binary_cf_open_name_lengths,
+        binary_cf_open_options, binary_cf_open_handles, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[0]);
+    rocksdb_column_family_handle_destroy(binary_cf_open_handles[1]);
+    rocksdb_close(binary_cf_db);
+
+    size_t binary_cf_count = 0;
+    size_t* binary_cf_name_lengths = NULL;
+    char** binary_cf_names = rocksdb_list_column_families_with_lengths(
+        binary_cf_options, binary_cf_path, &binary_cf_count,
+        &binary_cf_name_lengths, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    CheckCondition(binary_cf_count == 2);
+    CheckCondition(binary_cf_name_lengths[1] == sizeof(binary_cf_name));
+    CheckCondition(memcmp(binary_cf_names[1], binary_cf_name,
+                          sizeof(binary_cf_name)) == 0);
+    rocksdb_list_column_families_with_lengths_destroy(
+        binary_cf_names, binary_cf_name_lengths, binary_cf_count);
+    rocksdb_destroy_db(binary_cf_options, binary_cf_path, &binary_cf_err);
+    CheckNoError(binary_cf_err);
+    rocksdb_options_destroy(binary_cf_options);
   }
 
   StartPhase("pause_and_continue_all_background_work");

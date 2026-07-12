@@ -814,6 +814,28 @@ static char* CopyString(const std::string& str) {
   return result;
 }
 
+static std::vector<ColumnFamilyDescriptor> MakeColumnFamilyDescriptors(
+    int count, const char* const* names, const size_t* lengths,
+    const rocksdb_options_t* const* options) {
+  std::vector<ColumnFamilyDescriptor> descriptors;
+  descriptors.reserve(count);
+  for (int i = 0; i < count; ++i) {
+    descriptors.emplace_back(std::string(names[i], lengths[i]),
+                             ColumnFamilyOptions(options[i]->rep));
+  }
+  return descriptors;
+}
+
+static void SetColumnFamilyHandles(
+    const std::vector<ColumnFamilyHandle*>& handles,
+    rocksdb_column_family_handle_t** output) {
+  for (size_t i = 0; i < handles.size(); ++i) {
+    output[i] = new rocksdb_column_family_handle_t;
+    output[i]->rep = handles[i];
+    output[i]->immortal = false;
+  }
+}
+
 const char* rocksdb_compactionservice_jobinfo_t_get_db_name(
     const rocksdb_compactionservice_jobinfo_t* info, size_t* len) {
   *len = info->rep.db_name.size();
@@ -1648,14 +1670,15 @@ void rocksdb_close(rocksdb_t* db) {
 
 rocksdb_column_family_handle_t* rocksdb_create_column_family_with_import(
     rocksdb_t* db, const rocksdb_options_t* column_family_options,
-    const char* column_family_name,
+    const char* column_family_name, size_t column_family_name_length,
     const rocksdb_import_column_family_options_t* import_options,
     const rocksdb_export_import_files_metadata_t* metadata, char** errptr) {
   ColumnFamilyHandle* handle = nullptr;
-  if (SaveError(errptr, db->rep->CreateColumnFamilyWithImport(
-                            ColumnFamilyOptions(column_family_options->rep),
-                            std::string(column_family_name),
-                            import_options->rep, *metadata->rep, &handle))) {
+  if (SaveError(errptr,
+                db->rep->CreateColumnFamilyWithImport(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name, column_family_name_length),
+                    import_options->rep, *metadata->rep, &handle))) {
     return nullptr;
   }
   rocksdb_column_family_handle_t* result = new rocksdb_column_family_handle_t;
@@ -1666,7 +1689,7 @@ rocksdb_column_family_handle_t* rocksdb_create_column_family_with_import(
 
 rocksdb_column_family_handle_t* rocksdb_create_column_family_with_import_list(
     rocksdb_t* db, const rocksdb_options_t* column_family_options,
-    const char* column_family_name,
+    const char* column_family_name, size_t column_family_name_length,
     const rocksdb_import_column_family_options_t* import_options,
     const rocksdb_export_import_files_metadata_t* const* metadata,
     size_t metadata_count, char** errptr) {
@@ -1686,10 +1709,11 @@ rocksdb_column_family_handle_t* rocksdb_create_column_family_with_import_list(
   }
 
   ColumnFamilyHandle* handle = nullptr;
-  if (SaveError(errptr, db->rep->CreateColumnFamilyWithImport(
-                            ColumnFamilyOptions(column_family_options->rep),
-                            std::string(column_family_name),
-                            import_options->rep, metadata_list, &handle))) {
+  if (SaveError(errptr,
+                db->rep->CreateColumnFamilyWithImport(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name, column_family_name_length),
+                    import_options->rep, metadata_list, &handle))) {
     return nullptr;
   }
   rocksdb_column_family_handle_t* result = new rocksdb_column_family_handle_t;
@@ -1771,6 +1795,27 @@ rocksdb_t* rocksdb_open_column_families(
   return result;
 }
 
+rocksdb_t* rocksdb_open_column_families_with_lengths(
+    const rocksdb_options_t* db_options, const char* name,
+    int num_column_families, const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr) {
+  auto column_families = MakeColumnFamilyDescriptors(
+      num_column_families, column_family_names, column_family_name_lengths,
+      column_family_options);
+  DB* db;
+  std::vector<ColumnFamilyHandle*> handles;
+  if (SaveError(errptr, DB::Open(DBOptions(db_options->rep), std::string(name),
+                                 column_families, &handles, &db)))
+    return nullptr;
+  SetColumnFamilyHandles(handles, column_family_handles);
+  auto* result = new rocksdb_t;
+  result->rep = db;
+  result->owns_db = true;
+  return result;
+}
+
 rocksdb_t* rocksdb_open_column_families_with_ttl(
     const rocksdb_options_t* db_options, const char* name,
     int num_column_families, const char* const* column_family_names,
@@ -1824,6 +1869,7 @@ rocksdb_ttl_t* rocksdb_ttl_open(rocksdb_options_t* options, const char* name,
 rocksdb_ttl_t* rocksdb_ttl_open_column_families(
     rocksdb_options_t* options, const char* name, int num_column_families,
     const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
     rocksdb_options_t* const* column_family_options, const int* ttls,
     rocksdb_column_family_handle_t** handles, unsigned char read_only,
     char** errptr) {
@@ -1834,7 +1880,7 @@ rocksdb_ttl_t* rocksdb_ttl_open_column_families(
   for (int i = 0; i < num_column_families; ++i) {
     ttl_values.push_back(ttls[i]);
     column_families.emplace_back(
-        std::string(column_family_names[i]),
+        std::string(column_family_names[i], column_family_name_lengths[i]),
         ColumnFamilyOptions(column_family_options[i]->rep));
   }
 
@@ -1894,6 +1940,30 @@ rocksdb_t* rocksdb_open_for_read_only_column_families(
   return result;
 }
 
+rocksdb_t* rocksdb_open_for_read_only_column_families_with_lengths(
+    const rocksdb_options_t* db_options, const char* name,
+    int num_column_families, const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles,
+    unsigned char error_if_wal_file_exists, char** errptr) {
+  auto column_families = MakeColumnFamilyDescriptors(
+      num_column_families, column_family_names, column_family_name_lengths,
+      column_family_options);
+  DB* db;
+  std::vector<ColumnFamilyHandle*> handles;
+  if (SaveError(errptr,
+                DB::OpenForReadOnly(DBOptions(db_options->rep),
+                                    std::string(name), column_families,
+                                    &handles, &db, error_if_wal_file_exists)))
+    return nullptr;
+  SetColumnFamilyHandles(handles, column_family_handles);
+  auto* result = new rocksdb_t;
+  result->rep = db;
+  result->owns_db = true;
+  return result;
+}
+
 rocksdb_t* rocksdb_open_as_secondary_column_families(
     const rocksdb_options_t* db_options, const char* name,
     const char* secondary_path, int num_column_families,
@@ -1927,6 +1997,30 @@ rocksdb_t* rocksdb_open_as_secondary_column_families(
   return result;
 }
 
+rocksdb_t* rocksdb_open_as_secondary_column_families_with_lengths(
+    const rocksdb_options_t* db_options, const char* name,
+    const char* secondary_path, int num_column_families,
+    const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr) {
+  auto column_families = MakeColumnFamilyDescriptors(
+      num_column_families, column_family_names, column_family_name_lengths,
+      column_family_options);
+  DB* db;
+  std::vector<ColumnFamilyHandle*> handles;
+  if (SaveError(errptr, DB::OpenAsSecondary(DBOptions(db_options->rep),
+                                            std::string(name),
+                                            std::string(secondary_path),
+                                            column_families, &handles, &db)))
+    return nullptr;
+  SetColumnFamilyHandles(handles, column_family_handles);
+  auto* result = new rocksdb_t;
+  result->rep = db;
+  result->owns_db = true;
+  return result;
+}
+
 char** rocksdb_list_column_families(const rocksdb_options_t* options,
                                     const char* name, size_t* lencfs,
                                     char** errptr) {
@@ -1950,6 +2044,44 @@ void rocksdb_list_column_families_destroy(char** list, size_t len) {
   free(list);
 }
 
+char** rocksdb_list_column_families_with_lengths(
+    const rocksdb_options_t* options, const char* name, size_t* lencfs,
+    size_t** column_family_name_lengths, char** errptr) {
+  std::vector<std::string> families;
+  if (SaveError(errptr, DB::ListColumnFamilies(DBOptions(options->rep),
+                                               std::string(name), &families))) {
+    *lencfs = 0;
+    *column_family_name_lengths = nullptr;
+    return nullptr;
+  }
+
+  *lencfs = families.size();
+  char** result = static_cast<char**>(malloc(sizeof(char*) * families.size()));
+  *column_family_name_lengths =
+      static_cast<size_t*>(malloc(sizeof(size_t) * families.size()));
+  if ((families.size() != 0) &&
+      (result == nullptr || *column_family_name_lengths == nullptr)) {
+    free(result);
+    free(*column_family_name_lengths);
+    *column_family_name_lengths = nullptr;
+    *lencfs = 0;
+    SaveError(errptr,
+              Status::MemoryLimit("Could not allocate column family list"));
+    return nullptr;
+  }
+  for (size_t i = 0; i < families.size(); ++i) {
+    result[i] = CopyString(families[i]);
+    (*column_family_name_lengths)[i] = families[i].size();
+  }
+  return result;
+}
+
+void rocksdb_list_column_families_with_lengths_destroy(
+    char** list, size_t* column_family_name_lengths, size_t len) {
+  rocksdb_list_column_families_destroy(list, len);
+  free(column_family_name_lengths);
+}
+
 rocksdb_column_family_handle_t* rocksdb_create_column_family(
     rocksdb_t* db, const rocksdb_options_t* column_family_options,
     const char* column_family_name, char** errptr) {
@@ -1960,6 +2092,24 @@ rocksdb_column_family_handle_t* rocksdb_create_column_family(
     return nullptr;
   }
   rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
+  handle->rep = cf_handle;
+  handle->immortal = false;
+  return handle;
+}
+
+rocksdb_column_family_handle_t* rocksdb_create_column_family_with_length(
+    rocksdb_t* db, const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    char** errptr) {
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr,
+                db->rep->CreateColumnFamily(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name, column_family_name_length),
+                    &cf_handle))) {
+    return nullptr;
+  }
+  auto* handle = new rocksdb_column_family_handle_t;
   handle->rep = cf_handle;
   handle->immortal = false;
   return handle;
@@ -2014,14 +2164,35 @@ rocksdb_column_family_handle_t* rocksdb_create_column_family_with_ttl(
   return handle;
 }
 
+rocksdb_column_family_handle_t*
+rocksdb_create_column_family_with_ttl_and_length(
+    rocksdb_t* db, const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length, int ttl,
+    char** errptr) {
+  auto* db_with_ttl = static_cast<ROCKSDB_NAMESPACE::DBWithTTL*>(db->rep);
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr,
+                db_with_ttl->CreateColumnFamilyWithTtl(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name, column_family_name_length),
+                    &cf_handle, ttl)))
+    return nullptr;
+  auto* handle = new rocksdb_column_family_handle_t;
+  handle->rep = cf_handle;
+  handle->immortal = false;
+  return handle;
+}
+
 rocksdb_column_family_handle_t* rocksdb_ttl_create_column_family(
     rocksdb_ttl_t* db, rocksdb_options_t* column_family_options,
-    const char* column_family_name, int ttl, char** errptr) {
+    const char* column_family_name, size_t column_family_name_length, int ttl,
+    char** errptr) {
   ColumnFamilyHandle* cf_handle = nullptr;
   if (SaveError(errptr,
                 db->rep->CreateColumnFamilyWithTtl(
                     ColumnFamilyOptions(column_family_options->rep),
-                    std::string(column_family_name), &cf_handle, ttl))) {
+                    std::string(column_family_name, column_family_name_length),
+                    &cf_handle, ttl))) {
     return nullptr;
   }
   rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
@@ -8518,6 +8689,13 @@ const char* rocksdb_livefiles_column_family_name(const rocksdb_livefiles_t* lf,
   return lf->rep[index].column_family_name.c_str();
 }
 
+const char* rocksdb_livefiles_column_family_name_with_length(
+    const rocksdb_livefiles_t* lf, int index, size_t* len) {
+  const auto& name = lf->rep[index].column_family_name;
+  *len = name.size();
+  return name.data();
+}
+
 const char* rocksdb_livefiles_name(const rocksdb_livefiles_t* lf, int index) {
   return lf->rep[index].name.c_str();
 }
@@ -8624,6 +8802,12 @@ size_t rocksdb_column_family_metadata_get_file_count(
 char* rocksdb_column_family_metadata_get_name(
     rocksdb_column_family_metadata_t* cf_meta) {
   return strdup(cf_meta->rep.name.c_str());
+}
+
+char* rocksdb_column_family_metadata_get_name_with_length(
+    rocksdb_column_family_metadata_t* cf_meta, size_t* len) {
+  *len = cf_meta->rep.name.size();
+  return CopyString(cf_meta->rep.name);
 }
 
 size_t rocksdb_column_family_metadata_get_level_count(
@@ -8946,6 +9130,29 @@ rocksdb_transactiondb_t* rocksdb_transactiondb_open_column_families(
     column_family_handles[i] = c_handle;
   }
   rocksdb_transactiondb_t* result = new rocksdb_transactiondb_t;
+  result->rep = txn_db;
+  return result;
+}
+
+rocksdb_transactiondb_t*
+rocksdb_transactiondb_open_column_families_with_lengths(
+    const rocksdb_options_t* options,
+    const rocksdb_transactiondb_options_t* txn_db_options, const char* name,
+    int num_column_families, const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr) {
+  auto column_families = MakeColumnFamilyDescriptors(
+      num_column_families, column_family_names, column_family_name_lengths,
+      column_family_options);
+  TransactionDB* txn_db;
+  std::vector<ColumnFamilyHandle*> handles;
+  if (SaveError(errptr, TransactionDB::Open(options->rep, txn_db_options->rep,
+                                            std::string(name), column_families,
+                                            &handles, &txn_db)))
+    return nullptr;
+  SetColumnFamilyHandles(handles, column_family_handles);
+  auto* result = new rocksdb_transactiondb_t;
   result->rep = txn_db;
   return result;
 }
@@ -10248,6 +10455,28 @@ rocksdb_optimistictransactiondb_open_column_families(
   }
   rocksdb_optimistictransactiondb_t* result =
       new rocksdb_optimistictransactiondb_t;
+  result->rep = otxn_db;
+  return result;
+}
+
+rocksdb_optimistictransactiondb_t*
+rocksdb_optimistictransactiondb_open_column_families_with_lengths(
+    const rocksdb_options_t* db_options, const char* name,
+    int num_column_families, const char* const* column_family_names,
+    const size_t* column_family_name_lengths,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles, char** errptr) {
+  auto column_families = MakeColumnFamilyDescriptors(
+      num_column_families, column_family_names, column_family_name_lengths,
+      column_family_options);
+  OptimisticTransactionDB* otxn_db;
+  std::vector<ColumnFamilyHandle*> handles;
+  if (SaveError(errptr, OptimisticTransactionDB::Open(
+                            DBOptions(db_options->rep), std::string(name),
+                            column_families, &handles, &otxn_db)))
+    return nullptr;
+  SetColumnFamilyHandles(handles, column_family_handles);
+  auto* result = new rocksdb_optimistictransactiondb_t;
   result->rep = otxn_db;
   return result;
 }

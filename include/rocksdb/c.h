@@ -3537,6 +3537,51 @@ rocksdb_transactiondb_create_column_family(
     const rocksdb_options_t* column_family_options,
     const char* column_family_name, char** errptr);
 
+/**
+ * Creates a column family whose name is given by an explicit length, so that it
+ * may contain any byte, embedded NULs included.
+ *
+ * @param column_family_name the name bytes; not required to be NUL terminated.
+ * @param column_family_name_length the number of bytes to read from
+ *     column_family_name.
+ */
+extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
+rocksdb_transactiondb_create_column_family_with_length(
+    rocksdb_transactiondb_t* txn_db,
+    const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    char** errptr);
+
+extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
+rocksdb_transactiondb_create_column_family_with_import(
+    rocksdb_transactiondb_t* txn_db,
+    const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    const rocksdb_import_column_family_options_t* import_options,
+    const rocksdb_export_import_files_metadata_t* metadata, char** errptr);
+
+extern ROCKSDB_LIBRARY_API rocksdb_column_family_handle_t*
+rocksdb_transactiondb_create_column_family_with_import_list(
+    rocksdb_transactiondb_t* txn_db,
+    const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    const rocksdb_import_column_family_options_t* import_options,
+    const rocksdb_export_import_files_metadata_t* const* metadata,
+    size_t metadata_count, char** errptr);
+
+/**
+ * Drops a column family through the transaction database, which also releases
+ * the lock map that the transaction layer keeps for it. Dropping the same
+ * column family through the base database leaks that map instead.
+ */
+extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_drop_column_family(
+    rocksdb_transactiondb_t* txn_db, rocksdb_column_family_handle_t* handle,
+    char** errptr);
+
+extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_drop_column_families(
+    rocksdb_transactiondb_t* txn_db, rocksdb_column_family_handle_t** handles,
+    size_t num_handles, char** errptr);
+
 extern ROCKSDB_LIBRARY_API rocksdb_transactiondb_t* rocksdb_transactiondb_open(
     const rocksdb_options_t* options,
     const rocksdb_transactiondb_options_t* txn_db_options, const char* name,

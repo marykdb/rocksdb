@@ -4567,6 +4567,39 @@ int main(int argc, char** argv) {
     CheckTxnDBGetCF(txn_db, roptions, cfh, "cf_foo", NULL);
     CheckTxnDBPinGetCF(txn_db, roptions, cfh, "cf_foo", NULL);
 
+    // A column family created after the database was opened must be usable
+    // from a transaction: creating it through the transaction database is what
+    // registers it with the lock manager. Created through the base database
+    // instead, every locking call below fails with "Column family id not
+    // found". The name carries an embedded NUL to cover the length-aware
+    // entry point at the same time.
+    {
+      char runtime_cf_name[] = {'t', 'x', 'n', '\0', 'c', 'f'};
+      rocksdb_column_family_handle_t* runtime_cfh =
+          rocksdb_transactiondb_create_column_family_with_length(
+              txn_db, options, runtime_cf_name, sizeof(runtime_cf_name), &err);
+      CheckNoError(err);
+
+      rocksdb_transaction_t* runtime_txn =
+          rocksdb_transaction_begin(txn_db, woptions, txn_options, NULL);
+      rocksdb_transaction_put_cf(runtime_txn, runtime_cfh, "rt_foo", 6,
+                                 "rt_hello", 8, &err);
+      CheckNoError(err);
+      CheckTxnGetCF(runtime_txn, roptions, runtime_cfh, "rt_foo", "rt_hello");
+      CheckTxnGetForUpdateCF(runtime_txn, roptions, runtime_cfh, "rt_foo",
+                             "rt_hello");
+      rocksdb_transaction_commit(runtime_txn, &err);
+      CheckNoError(err);
+      rocksdb_transaction_destroy(runtime_txn);
+
+      CheckTxnDBGetCF(txn_db, roptions, runtime_cfh, "rt_foo", "rt_hello");
+
+      // Dropping through the transaction database releases the lock map too.
+      rocksdb_transactiondb_drop_column_family(txn_db, runtime_cfh, &err);
+      CheckNoError(err);
+      rocksdb_column_family_handle_destroy(runtime_cfh);
+    }
+
     // memory usage
     rocksdb_t* base_db = rocksdb_transactiondb_get_base_db(txn_db);
     rocksdb_memory_consumers_t* consumers = rocksdb_memory_consumers_create();

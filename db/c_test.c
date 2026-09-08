@@ -1473,6 +1473,105 @@ int main(int argc, char** argv) {
     db_options = NULL;
   }
 
+  StartPhase("transaction_import_column_families");
+  {
+    static char cf_export_paths[3][200];
+    static char db_import_path[200];
+    const char* source_names[] = {"txn_import_single_source",
+                                  "txn_import_list_source_a",
+                                  "txn_import_list_source_b"};
+    const char* source_keys[] = {"single_key", "list_a_key", "list_b_key"};
+    const char* source_values[] = {"single", "list_a", "list_b"};
+    rocksdb_column_family_handle_t* source_handles[3];
+    rocksdb_export_import_files_metadata_t* metadata[3];
+    rocksdb_options_t* db_options = rocksdb_options_create();
+    rocksdb_checkpoint_t* checkpoint;
+    rocksdb_transactiondb_options_t* transaction_db_options;
+    rocksdb_transaction_options_t* transaction_options;
+    rocksdb_transactiondb_t* import_txn_db;
+    rocksdb_import_column_family_options_t* import_options;
+    rocksdb_column_family_handle_t* imported_single;
+    rocksdb_column_family_handle_t* imported_list;
+    rocksdb_column_family_handle_t* imported_handles[2];
+    size_t i;
+
+    snprintf(db_import_path, sizeof(db_import_path),
+             "%s/rocksdb_c_test-%d-transaction_import", GetTempDir(),
+             ((int)geteuid()));
+    for (i = 0; i < 3; ++i) {
+      snprintf(cf_export_paths[i], sizeof(cf_export_paths[i]),
+               "%s/rocksdb_c_test-%d-transaction_import-%zu", GetTempDir(),
+               ((int)geteuid()), i);
+      source_handles[i] =
+          rocksdb_create_column_family(db, db_options, source_names[i], &err);
+      CheckNoError(err);
+      rocksdb_put_cf(db, woptions, source_handles[i], source_keys[i],
+                     strlen(source_keys[i]), source_values[i],
+                     strlen(source_values[i]), &err);
+      CheckNoError(err);
+    }
+
+    checkpoint = rocksdb_checkpoint_object_create(db, &err);
+    CheckNoError(err);
+    for (i = 0; i < 3; ++i) {
+      metadata[i] = rocksdb_checkpoint_export_column_family(
+          checkpoint, source_handles[i], cf_export_paths[i], &err);
+      CheckNoError(err);
+      rocksdb_drop_column_family(db, source_handles[i], &err);
+      CheckNoError(err);
+      rocksdb_column_family_handle_destroy(source_handles[i]);
+    }
+    rocksdb_checkpoint_object_destroy(checkpoint);
+
+    rocksdb_options_set_create_if_missing(db_options, 1);
+    rocksdb_options_set_error_if_exists(db_options, 1);
+    transaction_db_options = rocksdb_transactiondb_options_create();
+    transaction_options = rocksdb_transaction_options_create();
+    import_txn_db = rocksdb_transactiondb_open(
+        db_options, transaction_db_options, db_import_path, &err);
+    CheckNoError(err);
+    import_options = rocksdb_import_column_family_options_create();
+
+    imported_single = rocksdb_transactiondb_create_column_family_with_import(
+        import_txn_db, db_options, "txn_import_single",
+        strlen("txn_import_single"), import_options, metadata[0], &err);
+    CheckNoError(err);
+    const rocksdb_export_import_files_metadata_t* list_metadata[] = {
+        metadata[1], metadata[2]};
+    imported_list = rocksdb_transactiondb_create_column_family_with_import_list(
+        import_txn_db, db_options, "txn_import_list", strlen("txn_import_list"),
+        import_options, list_metadata, 2, &err);
+    CheckNoError(err);
+    for (i = 0; i < 3; ++i) {
+      rocksdb_export_import_files_metadata_destroy(metadata[i]);
+    }
+    rocksdb_import_column_family_options_destroy(import_options);
+
+    rocksdb_transaction_t* import_txn = rocksdb_transaction_begin(
+        import_txn_db, woptions, transaction_options, NULL);
+    CheckTxnGetForUpdateCF(import_txn, roptions, imported_single, "single_key",
+                           "single");
+    CheckTxnGetForUpdateCF(import_txn, roptions, imported_list, "list_a_key",
+                           "list_a");
+    CheckTxnGetForUpdateCF(import_txn, roptions, imported_list, "list_b_key",
+                           "list_b");
+    rocksdb_transaction_destroy(import_txn);
+
+    imported_handles[0] = imported_single;
+    imported_handles[1] = imported_list;
+    rocksdb_transactiondb_drop_column_families(import_txn_db, imported_handles,
+                                               2, &err);
+    CheckNoError(err);
+    rocksdb_column_family_handle_destroy(imported_single);
+    rocksdb_column_family_handle_destroy(imported_list);
+    rocksdb_transactiondb_close(import_txn_db);
+    rocksdb_destroy_db(db_options, db_import_path, &err);
+    CheckNoError(err);
+    rocksdb_transaction_options_destroy(transaction_options);
+    rocksdb_transactiondb_options_destroy(transaction_db_options);
+    rocksdb_options_destroy(db_options);
+  }
+
   StartPhase("compactall");
   rocksdb_compact_range(db, NULL, 0, NULL, 0);
   CheckGet(db, roptions, "foo", "hello");

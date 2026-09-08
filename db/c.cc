@@ -9087,6 +9087,101 @@ rocksdb_column_family_handle_t* rocksdb_transactiondb_create_column_family(
   return handle;
 }
 
+rocksdb_column_family_handle_t*
+rocksdb_transactiondb_create_column_family_with_length(
+    rocksdb_transactiondb_t* txn_db,
+    const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    char** errptr) {
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr,
+                txn_db->rep->CreateColumnFamily(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name, column_family_name_length),
+                    &cf_handle))) {
+    return nullptr;
+  }
+  rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
+  handle->rep = cf_handle;
+  handle->immortal = false;
+  return handle;
+}
+
+rocksdb_column_family_handle_t*
+rocksdb_transactiondb_create_column_family_with_import(
+    rocksdb_transactiondb_t* txn_db,
+    const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    const rocksdb_import_column_family_options_t* import_options,
+    const rocksdb_export_import_files_metadata_t* metadata, char** errptr) {
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr,
+                txn_db->rep->CreateColumnFamilyWithImport(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name, column_family_name_length),
+                    import_options->rep, *metadata->rep, &cf_handle))) {
+    return nullptr;
+  }
+  rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
+  handle->rep = cf_handle;
+  handle->immortal = false;
+  return handle;
+}
+
+rocksdb_column_family_handle_t*
+rocksdb_transactiondb_create_column_family_with_import_list(
+    rocksdb_transactiondb_t* txn_db,
+    const rocksdb_options_t* column_family_options,
+    const char* column_family_name, size_t column_family_name_length,
+    const rocksdb_import_column_family_options_t* import_options,
+    const rocksdb_export_import_files_metadata_t* const* metadata,
+    size_t metadata_count, char** errptr) {
+  if (metadata_count > 0 && metadata == nullptr) {
+    SaveError(errptr, Status::InvalidArgument("metadata list is null"));
+    return nullptr;
+  }
+
+  std::vector<const ExportImportFilesMetaData*> metadata_list;
+  metadata_list.reserve(metadata_count);
+  for (size_t i = 0; i < metadata_count; ++i) {
+    if (metadata[i] == nullptr || metadata[i]->rep == nullptr) {
+      SaveError(errptr, Status::InvalidArgument("metadata list entry is null"));
+      return nullptr;
+    }
+    metadata_list.push_back(metadata[i]->rep);
+  }
+
+  ColumnFamilyHandle* cf_handle = nullptr;
+  if (SaveError(errptr,
+                txn_db->rep->CreateColumnFamilyWithImport(
+                    ColumnFamilyOptions(column_family_options->rep),
+                    std::string(column_family_name, column_family_name_length),
+                    import_options->rep, metadata_list, &cf_handle))) {
+    return nullptr;
+  }
+  rocksdb_column_family_handle_t* handle = new rocksdb_column_family_handle_t;
+  handle->rep = cf_handle;
+  handle->immortal = false;
+  return handle;
+}
+
+void rocksdb_transactiondb_drop_column_family(
+    rocksdb_transactiondb_t* txn_db, rocksdb_column_family_handle_t* handle,
+    char** errptr) {
+  SaveError(errptr, txn_db->rep->DropColumnFamily(handle->rep));
+}
+
+void rocksdb_transactiondb_drop_column_families(
+    rocksdb_transactiondb_t* txn_db, rocksdb_column_family_handle_t** handles,
+    size_t num_handles, char** errptr) {
+  std::vector<ColumnFamilyHandle*> cf_handles;
+  cf_handles.reserve(num_handles);
+  for (size_t i = 0; i < num_handles; i++) {
+    cf_handles.push_back(handles[i]->rep);
+  }
+  SaveError(errptr, txn_db->rep->DropColumnFamilies(cf_handles));
+}
+
 rocksdb_transactiondb_t* rocksdb_transactiondb_open(
     const rocksdb_options_t* options,
     const rocksdb_transactiondb_options_t* txn_db_options, const char* name,

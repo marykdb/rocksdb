@@ -75,7 +75,8 @@ class InjectedErrorLog {
     EntryDetail entry;
   };
 
-  struct Entry {
+  // Keep the binary log record size stable on 32-bit x86 as well.
+  struct alignas(8) Entry {
     uint64_t timestamp_us;
     uint64_t thread_id;
     EntryDetail detail;

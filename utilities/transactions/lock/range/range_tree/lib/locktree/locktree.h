@@ -205,8 +205,10 @@ class locktree_manager {
   static const uint64_t DEFAULT_MAX_LOCK_MEMORY = 64L * 1024 * 1024;
 
   // tracks the current number of locks and lock memory
-  uint64_t m_max_lock_memory;
-  uint64_t m_current_lock_memory;
+  // Atomic types provide the alignment required for 64-bit operations on
+  // x86 and keep status/threshold reads synchronized with accounting writes.
+  std::atomic<uint64_t> m_max_lock_memory;
+  std::atomic<uint64_t> m_current_lock_memory;
 
   struct lt_counters m_lt_counters;
 

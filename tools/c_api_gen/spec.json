@@ -1703,6 +1703,65 @@
           "field": "opt->rep.report_bg_io_stats"
         }
       ]
+    },
+    {
+      "name": "CompactionOptions legacy",
+      "functions": [
+        {
+          "kind": "field_setter",
+          "name": "rocksdb_compactionoptions_fifo_set_max_data_files_size",
+          "receiver_type": "rocksdb_compactionoptions_fifo_t*",
+          "receiver_name": "options",
+          "value_type": "uint64_t",
+          "value_name": "v",
+          "field": "options->rep.max_data_files_size",
+          "value_expr": "v"
+        },
+        {
+          "kind": "field_getter",
+          "name": "rocksdb_compactionoptions_fifo_get_max_data_files_size",
+          "receiver_type": "const rocksdb_compactionoptions_fifo_t*",
+          "receiver_name": "options",
+          "return_type": "uint64_t",
+          "expr": "options->rep.max_data_files_size"
+        },
+        {
+          "kind": "field_setter",
+          "name": "rocksdb_compactionoptions_fifo_set_use_kv_ratio_compaction",
+          "receiver_type": "rocksdb_compactionoptions_fifo_t*",
+          "receiver_name": "options",
+          "value_type": "unsigned char",
+          "value_name": "v",
+          "field": "options->rep.use_kv_ratio_compaction",
+          "value_expr": "v != 0"
+        },
+        {
+          "kind": "field_getter",
+          "name": "rocksdb_compactionoptions_fifo_get_use_kv_ratio_compaction",
+          "receiver_type": "const rocksdb_compactionoptions_fifo_t*",
+          "receiver_name": "options",
+          "return_type": "unsigned char",
+          "expr": "options->rep.use_kv_ratio_compaction"
+        },
+        {
+          "kind": "field_setter",
+          "name": "rocksdb_compactionoptions_universal_set_allow_trivial_move",
+          "receiver_type": "rocksdb_compactionoptions_universal_t*",
+          "receiver_name": "options",
+          "value_type": "unsigned char",
+          "value_name": "v",
+          "field": "options->rep->allow_trivial_move",
+          "value_expr": "v != 0"
+        },
+        {
+          "kind": "field_getter",
+          "name": "rocksdb_compactionoptions_universal_get_allow_trivial_move",
+          "receiver_type": "const rocksdb_compactionoptions_universal_t*",
+          "receiver_name": "options",
+          "return_type": "unsigned char",
+          "expr": "options->rep->allow_trivial_move"
+        }
+      ]
     }
   ]
 }

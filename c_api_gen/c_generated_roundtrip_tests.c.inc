@@ -301,6 +301,36 @@ static void rocksdb_roundtrip_test_rocksdb_compaction_options(void) {
   rocksdb_compaction_options_destroy(obj);
 }
 
+static void rocksdb_roundtrip_test_rocksdb_compactionoptions_fifo(void) {
+  rocksdb_compactionoptions_fifo_t* obj =
+      rocksdb_compactionoptions_fifo_create();
+  rocksdb_compactionoptions_fifo_set_max_data_files_size(obj, 1);
+  CheckCondition(rocksdb_compactionoptions_fifo_get_max_data_files_size(obj) ==
+                 1);
+  rocksdb_compactionoptions_fifo_set_max_data_files_size(obj, 0);
+  CheckCondition(rocksdb_compactionoptions_fifo_get_max_data_files_size(obj) ==
+                 0);
+  rocksdb_compactionoptions_fifo_set_use_kv_ratio_compaction(obj, 1);
+  CheckCondition(
+      rocksdb_compactionoptions_fifo_get_use_kv_ratio_compaction(obj) == 1);
+  rocksdb_compactionoptions_fifo_set_use_kv_ratio_compaction(obj, 0);
+  CheckCondition(
+      rocksdb_compactionoptions_fifo_get_use_kv_ratio_compaction(obj) == 0);
+  rocksdb_compactionoptions_fifo_destroy(obj);
+}
+
+static void rocksdb_roundtrip_test_rocksdb_compactionoptions_universal(void) {
+  rocksdb_compactionoptions_universal_t* obj =
+      rocksdb_compactionoptions_universal_create();
+  rocksdb_compactionoptions_universal_set_allow_trivial_move(obj, 1);
+  CheckCondition(
+      rocksdb_compactionoptions_universal_get_allow_trivial_move(obj) == 1);
+  rocksdb_compactionoptions_universal_set_allow_trivial_move(obj, 0);
+  CheckCondition(
+      rocksdb_compactionoptions_universal_get_allow_trivial_move(obj) == 0);
+  rocksdb_compactionoptions_universal_destroy(obj);
+}
+
 static void rocksdb_roundtrip_test_rocksdb_compactoptions(void) {
   rocksdb_compactoptions_t* obj = rocksdb_compactoptions_create();
   rocksdb_compactoptions_set_blob_garbage_collection_age_cutoff(obj, 1);
@@ -1286,6 +1316,8 @@ static void rocksdb_run_generated_roundtrip_tests(void) {
   rocksdb_roundtrip_test_rocksdb_block_cache_trace_writer_options();
   rocksdb_roundtrip_test_rocksdb_column_family_metadata_options();
   rocksdb_roundtrip_test_rocksdb_compaction_options();
+  rocksdb_roundtrip_test_rocksdb_compactionoptions_fifo();
+  rocksdb_roundtrip_test_rocksdb_compactionoptions_universal();
   rocksdb_roundtrip_test_rocksdb_compactoptions();
   rocksdb_roundtrip_test_rocksdb_create_backup_options();
   rocksdb_roundtrip_test_rocksdb_cuckoo_options();

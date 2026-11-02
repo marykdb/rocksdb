@@ -25,6 +25,11 @@ CLANG_FORMAT_STYLE_FILE = ROOT / ".clang-format"
 
 JOBS = [
     (
+        ["CompactionOptions legacy"],
+        GENERATED_ROOT / "c_generated_compaction_options_legacy.h.inc",
+        GENERATED_ROOT / "c_generated_compaction_options_legacy.cc.inc",
+    ),
+    (
         ["DB data operations", "WriteBatch", "Transaction", "TransactionDB simple"],
         GENERATED_ROOT / "c_generated_subset.h.inc",
         GENERATED_ROOT / "c_generated_subset.cc.inc",

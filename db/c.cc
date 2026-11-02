@@ -345,6 +345,10 @@ struct rocksdb_tableproperties_t {
   std::shared_ptr<const TableProperties> rep;
 };
 
+struct rocksdb_table_properties_collection_t {
+  std::vector<std::pair<std::string, rocksdb_tableproperties_t>> entries;
+};
+
 struct rocksdb_sstfilereader_t {
   SstFileReader* rep;
 };
@@ -3237,6 +3241,180 @@ char* rocksdb_property_value_cf(rocksdb_t* db,
   }
 }
 
+namespace {
+// A null pointer represents an empty binary key only when its length is zero.
+bool ValidBinaryKey(const char* key, size_t len) {
+  return key != nullptr || len == 0;
+}
+
+rocksdb_table_properties_collection_t* MakeTablePropertiesCollection(
+    ROCKSDB_NAMESPACE::TablePropertiesCollection&& properties) {
+  auto* result = new rocksdb_table_properties_collection_t;
+  result->entries.reserve(properties.size());
+  for (auto& entry : properties) {
+    result->entries.emplace_back(
+        entry.first, rocksdb_tableproperties_t{std::move(entry.second)});
+  }
+  return result;
+}
+}  // namespace
+
+void rocksdb_approximate_memtable_stats_cf(
+    rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
+    const char* start, size_t start_len, const char* limit, size_t limit_len,
+    uint64_t* count, uint64_t* size, char** errptr) {
+  if (count != nullptr) *count = 0;
+  if (size != nullptr) *size = 0;
+  if (db == nullptr || column_family == nullptr || count == nullptr ||
+      size == nullptr || !ValidBinaryKey(start, start_len) ||
+      !ValidBinaryKey(limit, limit_len)) {
+    SaveError(errptr,
+              Status::InvalidArgument("Invalid memtable statistics arguments"));
+    return;
+  }
+  const Slice first(start == nullptr ? "" : start, start_len);
+  const Slice last(limit == nullptr ? "" : limit, limit_len);
+  if (column_family->rep->GetComparator()->Compare(first, last) > 0) {
+    SaveError(errptr, Status::InvalidArgument("Range start exceeds limit"));
+    return;
+  }
+  db->rep->GetApproximateMemTableStats(column_family->rep, Range(first, last),
+                                       count, size);
+}
+
+void rocksdb_approximate_memtable_stats(rocksdb_t* db, const char* start,
+                                        size_t start_len, const char* limit,
+                                        size_t limit_len, uint64_t* count,
+                                        uint64_t* size, char** errptr) {
+  rocksdb_column_family_handle_t cf{
+      db != nullptr ? db->rep->DefaultColumnFamily() : nullptr, false};
+  rocksdb_approximate_memtable_stats_cf(db, &cf, start, start_len, limit,
+                                        limit_len, count, size, errptr);
+}
+
+rocksdb_table_properties_collection_t* rocksdb_get_properties_of_all_tables_cf(
+    rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
+    char** errptr) {
+  if (db == nullptr || column_family == nullptr) {
+    SaveError(errptr,
+              Status::InvalidArgument("Invalid table properties arguments"));
+    return nullptr;
+  }
+  ROCKSDB_NAMESPACE::TablePropertiesCollection properties;
+  if (SaveError(errptr, db->rep->GetPropertiesOfAllTables(column_family->rep,
+                                                          &properties))) {
+    return nullptr;
+  }
+  return MakeTablePropertiesCollection(std::move(properties));
+}
+
+rocksdb_table_properties_collection_t* rocksdb_get_properties_of_all_tables(
+    rocksdb_t* db, char** errptr) {
+  rocksdb_column_family_handle_t cf{
+      db != nullptr ? db->rep->DefaultColumnFamily() : nullptr, false};
+  return rocksdb_get_properties_of_all_tables_cf(db, &cf, errptr);
+}
+
+rocksdb_table_properties_collection_t*
+rocksdb_get_properties_of_tables_in_range_cf(
+    rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
+    int num_ranges, const char* const* starts, const size_t* start_lens,
+    const char* const* limits, const size_t* limit_lens, char** errptr) {
+  if (db == nullptr || column_family == nullptr || num_ranges < 0 ||
+      (num_ranges > 0 && (starts == nullptr || start_lens == nullptr ||
+                          limits == nullptr || limit_lens == nullptr))) {
+    SaveError(errptr, Status::InvalidArgument("Invalid table property ranges"));
+    return nullptr;
+  }
+  std::vector<Range> ranges;
+  ranges.reserve(num_ranges);
+  const Comparator* comparator = column_family->rep->GetComparator();
+  for (int i = 0; i < num_ranges; ++i) {
+    if (!ValidBinaryKey(starts[i], start_lens[i]) ||
+        !ValidBinaryKey(limits[i], limit_lens[i])) {
+      SaveError(errptr,
+                Status::InvalidArgument("Invalid table property range key"));
+      return nullptr;
+    }
+    const Slice start(starts[i] == nullptr ? "" : starts[i], start_lens[i]);
+    const Slice limit(limits[i] == nullptr ? "" : limits[i], limit_lens[i]);
+    if (comparator->Compare(start, limit) > 0) {
+      SaveError(errptr, Status::InvalidArgument("Range start exceeds limit"));
+      return nullptr;
+    }
+    ranges.emplace_back(start, limit);
+  }
+  ROCKSDB_NAMESPACE::TablePropertiesCollection properties;
+  if (!ranges.empty() &&
+      SaveError(errptr, db->rep->GetPropertiesOfTablesInRange(
+                            column_family->rep, ranges.data(), ranges.size(),
+                            &properties))) {
+    return nullptr;
+  }
+  return MakeTablePropertiesCollection(std::move(properties));
+}
+
+rocksdb_table_properties_collection_t*
+rocksdb_get_properties_of_tables_in_range(rocksdb_t* db, int num_ranges,
+                                          const char* const* starts,
+                                          const size_t* start_lens,
+                                          const char* const* limits,
+                                          const size_t* limit_lens,
+                                          char** errptr) {
+  rocksdb_column_family_handle_t cf{
+      db != nullptr ? db->rep->DefaultColumnFamily() : nullptr, false};
+  return rocksdb_get_properties_of_tables_in_range_cf(
+      db, &cf, num_ranges, starts, start_lens, limits, limit_lens, errptr);
+}
+
+void rocksdb_table_properties_collection_destroy(
+    rocksdb_table_properties_collection_t* collection) {
+  delete collection;
+}
+
+size_t rocksdb_table_properties_collection_count(
+    const rocksdb_table_properties_collection_t* collection) {
+  return collection == nullptr ? 0 : collection->entries.size();
+}
+
+const char* rocksdb_table_properties_collection_key_at(
+    const rocksdb_table_properties_collection_t* collection, size_t pos,
+    size_t* len) {
+  if (len != nullptr) *len = 0;
+  if (collection == nullptr || pos >= collection->entries.size())
+    return nullptr;
+  const auto& key = collection->entries[pos].first;
+  if (len != nullptr) *len = key.size();
+  return key.data();
+}
+
+const rocksdb_tableproperties_t* rocksdb_table_properties_collection_value_at(
+    const rocksdb_table_properties_collection_t* collection, size_t pos) {
+  if (collection == nullptr || pos >= collection->entries.size())
+    return nullptr;
+  return &collection->entries[pos].second;
+}
+
+void rocksdb_clip_column_family(rocksdb_t* db,
+                                rocksdb_column_family_handle_t* column_family,
+                                const char* begin, size_t begin_len,
+                                const char* end, size_t end_len,
+                                char** errptr) {
+  if (db == nullptr || column_family == nullptr ||
+      !ValidBinaryKey(begin, begin_len) || !ValidBinaryKey(end, end_len)) {
+    SaveError(errptr,
+              Status::InvalidArgument("Invalid clip column family arguments"));
+    return;
+  }
+  const Slice first(begin == nullptr ? "" : begin, begin_len);
+  const Slice last(end == nullptr ? "" : end, end_len);
+  if (column_family->rep->GetComparator()->Compare(first, last) > 0) {
+    SaveError(errptr, Status::InvalidArgument("Range start exceeds limit"));
+    return;
+  }
+  SaveError(errptr, db->rep->ClipColumnFamily(column_family->rep, first, last));
+}
+
 void rocksdb_approximate_sizes(rocksdb_t* db, int num_ranges,
                                const char* const* range_start_key,
                                const size_t* range_start_key_len,
@@ -5928,6 +6106,66 @@ void rocksdb_options_set_wal_filter(rocksdb_options_t* opt,
 
 void rocksdb_options_clear_wal_filter(rocksdb_options_t* opt) {
   opt->rep.wal_filter = nullptr;
+}
+
+// BEGIN generated: c_generated_compaction_options_legacy.cc.inc
+// @generated
+// -----------------------------------------------------------------------------
+// Auto-generated by tools/c_api_gen/generate_c_api.py.
+// DO NOT EDIT THIS FILE DIRECTLY.
+// Source: tools/c_api_gen/spec.json
+// -----------------------------------------------------------------------------
+
+// To regenerate this file:
+//   python3 tools/c_api_gen/generate_c_api.py
+//     --spec tools/c_api_gen/spec.json --section 'CompactionOptions legacy'
+//     --header-out
+//     c_api_gen/c_generated_compaction_options_legacy.h.inc
+//     --source-out
+//     c_api_gen/c_generated_compaction_options_legacy.cc.inc
+
+/* CompactionOptions legacy */
+
+void rocksdb_compactionoptions_fifo_set_max_data_files_size(
+    rocksdb_compactionoptions_fifo_t* options, uint64_t v) {
+  options->rep.max_data_files_size = v;
+}
+
+uint64_t rocksdb_compactionoptions_fifo_get_max_data_files_size(
+    const rocksdb_compactionoptions_fifo_t* options) {
+  return options->rep.max_data_files_size;
+}
+
+void rocksdb_compactionoptions_fifo_set_use_kv_ratio_compaction(
+    rocksdb_compactionoptions_fifo_t* options, unsigned char v) {
+  options->rep.use_kv_ratio_compaction = v != 0;
+}
+
+unsigned char rocksdb_compactionoptions_fifo_get_use_kv_ratio_compaction(
+    const rocksdb_compactionoptions_fifo_t* options) {
+  return options->rep.use_kv_ratio_compaction;
+}
+
+void rocksdb_compactionoptions_universal_set_allow_trivial_move(
+    rocksdb_compactionoptions_universal_t* options, unsigned char v) {
+  options->rep->allow_trivial_move = v != 0;
+}
+
+unsigned char rocksdb_compactionoptions_universal_get_allow_trivial_move(
+    const rocksdb_compactionoptions_universal_t* options) {
+  return options->rep->allow_trivial_move;
+}
+// END generated: c_generated_compaction_options_legacy.cc.inc
+
+void rocksdb_options_set_compaction_options_fifo(
+    rocksdb_options_t* options, const rocksdb_compactionoptions_fifo_t* fifo) {
+  options->rep.compaction_options_fifo = fifo->rep;
+}
+
+void rocksdb_options_set_compaction_options_universal(
+    rocksdb_options_t* options,
+    const rocksdb_compactionoptions_universal_t* universal) {
+  options->rep.compaction_options_universal = *universal->rep;
 }
 
 // BEGIN generated: c_generated_options_subset.cc.inc
@@ -14127,12 +14365,15 @@ int32_t rocksdb_number_levels_cf(
 }
 
 int32_t rocksdb_max_mem_compaction_level(rocksdb_t* db) {
+  (void)db;
   // Deprecated upstream API always returned zero before its removal.
   return 0;
 }
 
 int32_t rocksdb_max_mem_compaction_level_cf(
     rocksdb_t* db, rocksdb_column_family_handle_t* column_family) {
+  (void)db;
+  (void)column_family;
   // Deprecated upstream API always returned zero before its removal.
   return 0;
 }

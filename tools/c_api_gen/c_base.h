@@ -216,6 +216,8 @@ typedef struct rocksdb_subcompactionjobinfo_t rocksdb_subcompactionjobinfo_t;
 typedef struct rocksdb_externalfileingestioninfo_t
     rocksdb_externalfileingestioninfo_t;
 typedef struct rocksdb_table_properties_t rocksdb_table_properties_t;
+typedef struct rocksdb_table_properties_collection_t
+    rocksdb_table_properties_collection_t;
 typedef struct rocksdb_compaction_job_stats_t rocksdb_compaction_job_stats_t;
 typedef struct rocksdb_compaction_file_info_t rocksdb_compaction_file_info_t;
 typedef struct rocksdb_blob_file_addition_info_t
@@ -680,6 +682,67 @@ extern ROCKSDB_LIBRARY_API int rocksdb_property_int_cf(
 extern ROCKSDB_LIBRARY_API char* rocksdb_property_value_cf(
     rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
     const char* propname);
+
+/* Approximate record count and bytes in memtables for [start, limit).
+ * Lengths preserve binary keys. Results exclude flushed SST files. On invalid
+ * arguments outputs are zeroed and errptr receives an owned error string. */
+extern ROCKSDB_LIBRARY_API void rocksdb_approximate_memtable_stats(
+    rocksdb_t* db, const char* start, size_t start_len, const char* limit,
+    size_t limit_len, uint64_t* count, uint64_t* size, char** errptr);
+extern ROCKSDB_LIBRARY_API void rocksdb_approximate_memtable_stats_cf(
+    rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
+    const char* start, size_t start_len, const char* limit, size_t limit_len,
+    uint64_t* count, uint64_t* size, char** errptr);
+
+/* Returns an owned snapshot of SST filenames and shared immutable properties.
+ * Destroy with rocksdb_table_properties_collection_destroy. Returns NULL on
+ * failure; empty successful results are non-NULL with count zero. The snapshot
+ * remains valid after the DB closes. Reads do not prevent concurrent DB writes.
+ */
+extern ROCKSDB_LIBRARY_API rocksdb_table_properties_collection_t*
+rocksdb_get_properties_of_all_tables(rocksdb_t* db, char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_table_properties_collection_t*
+rocksdb_get_properties_of_all_tables_cf(
+    rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
+    char** errptr);
+/* Select SSTs overlapping any [start, limit) range, preserving binary keys.
+ * Zero ranges returns an empty snapshot. The returned properties describe whole
+ * SSTs, not only the records within the requested ranges. */
+extern ROCKSDB_LIBRARY_API rocksdb_table_properties_collection_t*
+rocksdb_get_properties_of_tables_in_range(rocksdb_t* db, int num_ranges,
+                                          const char* const* starts,
+                                          const size_t* start_lens,
+                                          const char* const* limits,
+                                          const size_t* limit_lens,
+                                          char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_table_properties_collection_t*
+rocksdb_get_properties_of_tables_in_range_cf(
+    rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
+    int num_ranges, const char* const* starts, const size_t* start_lens,
+    const char* const* limits, const size_t* limit_lens, char** errptr);
+extern ROCKSDB_LIBRARY_API void rocksdb_table_properties_collection_destroy(
+    rocksdb_table_properties_collection_t* collection);
+extern ROCKSDB_LIBRARY_API size_t rocksdb_table_properties_collection_count(
+    const rocksdb_table_properties_collection_t* collection);
+/* Borrowed results valid until collection destruction; do not free/destroy
+ * them. Out-of-range positions return NULL and key length zero. Collections
+ * support concurrent reads, but destruction must not race with readers. */
+extern ROCKSDB_LIBRARY_API const char*
+rocksdb_table_properties_collection_key_at(
+    const rocksdb_table_properties_collection_t* collection, size_t pos,
+    size_t* len);
+extern ROCKSDB_LIBRARY_API const rocksdb_tableproperties_t*
+rocksdb_table_properties_collection_value_at(
+    const rocksdb_table_properties_collection_t* collection, size_t pos);
+
+/* Physically discard entries outside [begin, end), including tombstones.
+ * Requires exclusive application access to this column family: do not perform
+ * concurrent updates. This is a heavyweight flush/compaction operation. Binary
+ * bounds are interpreted using the column family's comparator. */
+extern ROCKSDB_LIBRARY_API void rocksdb_clip_column_family(
+    rocksdb_t* db, rocksdb_column_family_handle_t* column_family,
+    const char* begin, size_t begin_len, const char* end, size_t end_len,
+    char** errptr);
 
 extern ROCKSDB_LIBRARY_API void rocksdb_approximate_sizes(
     rocksdb_t* db, int num_ranges, const char* const* range_start_key,
@@ -3850,6 +3913,17 @@ extern ROCKSDB_LIBRARY_API char* rocksdb_open_and_compact_with_options(
     size_t* output_len,
     const rocksdb_compaction_service_options_override_t* override_options,
     char** errptr);
+
+/* These bridges accept the handles returned by the legacy compactionoptions
+ * constructors; the similarly named option structs are distinct opaque types.
+ */
+#include "c_api_gen/c_generated_compaction_options_legacy.h.inc"
+extern ROCKSDB_LIBRARY_API void rocksdb_options_set_compaction_options_fifo(
+    rocksdb_options_t* options, const rocksdb_compactionoptions_fifo_t* fifo);
+extern ROCKSDB_LIBRARY_API void
+rocksdb_options_set_compaction_options_universal(
+    rocksdb_options_t* options,
+    const rocksdb_compactionoptions_universal_t* universal);
 
 #include "c_api_gen/c_generated_option_structs_auto.h.inc"
 

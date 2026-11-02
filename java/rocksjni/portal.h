@@ -55,6 +55,39 @@ namespace ROCKSDB_NAMESPACE {
 
 class JavaClass {
  public:
+#if defined(__ANDROID__)
+  // JNI_OnLoad runs with the loader that loaded this library. FindClass on a
+  // newly attached native thread otherwise uses Android's bootstrap loader.
+  static bool initializeClassLoader(JNIEnv* env) {
+    jclass rocksdb_class = env->FindClass("org/rocksdb/RocksDB");
+    if (rocksdb_class == nullptr) return false;
+    jclass class_class = env->GetObjectClass(rocksdb_class);
+    jmethodID get_loader = env->GetMethodID(
+        class_class, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    env->DeleteLocalRef(class_class);
+    if (get_loader == nullptr) {
+      env->DeleteLocalRef(rocksdb_class);
+      return false;
+    }
+    jobject loader = env->CallObjectMethod(rocksdb_class, get_loader);
+    env->DeleteLocalRef(rocksdb_class);
+    if (loader == nullptr || env->ExceptionCheck()) return false;
+    jclass loader_class = env->GetObjectClass(loader);
+    load_class_ = env->GetMethodID(
+        loader_class, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    env->DeleteLocalRef(loader_class);
+    if (load_class_ != nullptr) class_loader_ = env->NewGlobalRef(loader);
+    env->DeleteLocalRef(loader);
+    return class_loader_ != nullptr && !env->ExceptionCheck();
+  }
+
+  static void releaseClassLoader(JNIEnv* env) {
+    if (class_loader_ != nullptr) env->DeleteGlobalRef(class_loader_);
+    class_loader_ = nullptr;
+    load_class_ = nullptr;
+  }
+#endif
+
   /**
    * Gets and initializes a Java Class
    *
@@ -67,10 +100,29 @@ class JavaClass {
    *     OutOfMemoryError or ExceptionInInitializerError exceptions is thrown
    */
   static jclass getJClass(JNIEnv* env, const char* jclazz_name) {
+#if defined(__ANDROID__)
+    if (class_loader_ != nullptr &&
+        std::strncmp(jclazz_name, "org/rocksdb/", 12) == 0) {
+      std::string name(jclazz_name);
+      std::replace(name.begin(), name.end(), '/', '.');
+      jstring jname = env->NewStringUTF(name.c_str());
+      if (jname == nullptr) return nullptr;
+      auto jclazz = static_cast<jclass>(
+          env->CallObjectMethod(class_loader_, load_class_, jname));
+      env->DeleteLocalRef(jname);
+      return jclazz;
+    }
+#endif
     jclass jclazz = env->FindClass(jclazz_name);
     assert(jclazz != nullptr);
     return jclazz;
   }
+
+#if defined(__ANDROID__)
+ private:
+  inline static jobject class_loader_ = nullptr;
+  inline static jmethodID load_class_ = nullptr;
+#endif
 };
 
 // Native class template

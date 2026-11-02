@@ -30,6 +30,24 @@
 #include "rocksjni/kv_helper.h"
 #include "rocksjni/portal.h"
 
+#if defined(__ANDROID__)
+extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
+  JNIEnv* env = nullptr;
+  if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK ||
+      !ROCKSDB_NAMESPACE::JavaClass::initializeClassLoader(env)) {
+    return JNI_ERR;
+  }
+  return JNI_VERSION_1_6;
+}
+
+extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void*) {
+  JNIEnv* env = nullptr;
+  if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
+    ROCKSDB_NAMESPACE::JavaClass::releaseClassLoader(env);
+  }
+}
+#endif
+
 #ifdef min
 #undef min
 #endif

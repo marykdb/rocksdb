@@ -29,6 +29,14 @@ void RegisterCrashCallback(CrashCallback /*callback*/) {}
 #include <pthread.h>
 #include <unistd.h>
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if (defined(TARGET_OS_TV) && TARGET_OS_TV) || \
+    (defined(TARGET_OS_WATCH) && TARGET_OS_WATCH)
+#define ROCKSDB_APPLE_PLATFORM_NO_FORK 1
+#endif
+#endif
+
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -150,6 +158,7 @@ void PrintStackTraceLine(const char* symbol, void* frame) {
 
 #endif
 
+#if !defined(ROCKSDB_APPLE_PLATFORM_NO_FORK)
 const char* GetLldbScriptSelectThread(long long tid) {
   // NOTE: called from a signal handler, so no heap allocation
   static char script[80];
@@ -157,6 +166,7 @@ const char* GetLldbScriptSelectThread(long long tid) {
            "script -l python -- lldb.process.SetSelectedThreadByID(%lld)", tid);
   return script;
 }
+#endif  // !defined(ROCKSDB_APPLE_PLATFORM_NO_FORK)
 
 }  // namespace
 
@@ -203,6 +213,19 @@ void PrintStack(int first_frames_to_skip) {
     return;
   }
 
+#if defined(ROCKSDB_APPLE_PLATFORM_NO_FORK)
+  if (lldb_stack_trace || gdb_stack_trace || debug) {
+    fprintf(stderr,
+#if defined(TARGET_OS_TV) && TARGET_OS_TV
+            "Debugger stack traces are not supported on tvOS; "
+#elif defined(TARGET_OS_WATCH) && TARGET_OS_WATCH
+            "Debugger stack traces are not supported on watchOS; "
+#else
+            "Debugger stack traces are not supported on this platform; "
+#endif
+            "falling back to backtrace().\n");
+  }
+#else
   if (lldb_stack_trace || gdb_stack_trace || debug) {
     // Allow ouside debugger to attach, even with Yama security restrictions
 #ifdef PR_SET_PTRACER_ANY
@@ -294,6 +317,7 @@ void PrintStack(int first_frames_to_skip) {
     }
     fprintf(stderr, "GDB failed; falling back on backtrace+addr2line...\n");
   }
+#endif
 
   const int kMaxFrames = 100;
   void* frames[kMaxFrames];

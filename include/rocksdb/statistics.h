@@ -919,6 +919,9 @@ class Statistics : public Customizable {
   virtual void recordTick(uint32_t tickerType, uint64_t count = 1) = 0;
   virtual void setTickerCount(uint32_t tickerType, uint64_t count) = 0;
   virtual uint64_t getAndResetTickerCount(uint32_t tickerType) = 0;
+  virtual void SetHistograms(const std::vector<uint32_t>& histogram_types) {
+    (void)histogram_types;
+  }
   virtual void reportTimeToHistogram(uint32_t histogramType, uint64_t time) {
     if (get_stats_level() <= StatsLevel::kExceptTimers) {
       return;

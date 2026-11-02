@@ -539,9 +539,6 @@ extern ROCKSDB_LIBRARY_API void rocksdb_flushoptions_set_wait(
 extern ROCKSDB_LIBRARY_API unsigned char rocksdb_flushoptions_get_wait(
     rocksdb_flushoptions_t* opt);
 
-extern ROCKSDB_LIBRARY_API void rocksdb_flushoptions_set_allow_write_stall(
-    rocksdb_flushoptions_t* opt, unsigned char v);
-
 extern ROCKSDB_LIBRARY_API unsigned char
 rocksdb_flushoptions_get_allow_write_stall(rocksdb_flushoptions_t* opt);
 
@@ -860,10 +857,6 @@ rocksdb_open_and_compact_options_get_allow_resumption(
     rocksdb_open_and_compact_options_t* opt);
 
 /* ImportColumnFamilyOptions */
-
-extern ROCKSDB_LIBRARY_API unsigned char
-rocksdb_import_column_family_options_get_move_files(
-    rocksdb_import_column_family_options_t* opt);
 
 /* SizeApproximationOptions */
 
@@ -1463,10 +1456,6 @@ extern ROCKSDB_LIBRARY_API int
 rocksdb_create_backup_options_get_background_thread_cpu_priority(
     rocksdb_create_backup_options_t* opt);
 
-extern ROCKSDB_LIBRARY_API void
-rocksdb_create_backup_options_set_flush_before_backup(
-    rocksdb_create_backup_options_t* opt, unsigned char v);
-
 extern ROCKSDB_LIBRARY_API unsigned char
 rocksdb_create_backup_options_get_flush_before_backup(
     rocksdb_create_backup_options_t* opt);
@@ -1497,10 +1486,6 @@ extern ROCKSDB_LIBRARY_API int rocksdb_restore_options_get_mode(
 extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_options_set_max_num_locks(
     rocksdb_transactiondb_options_t* opt, int64_t v);
 
-extern ROCKSDB_LIBRARY_API int64_t
-rocksdb_transactiondb_options_get_max_num_locks(
-    rocksdb_transactiondb_options_t* opt);
-
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transactiondb_options_set_max_num_deadlocks(
     rocksdb_transactiondb_options_t* opt, uint32_t v);
@@ -1512,30 +1497,13 @@ rocksdb_transactiondb_options_get_max_num_deadlocks(
 extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_options_set_num_stripes(
     rocksdb_transactiondb_options_t* opt, size_t v);
 
-extern ROCKSDB_LIBRARY_API size_t rocksdb_transactiondb_options_get_num_stripes(
-    rocksdb_transactiondb_options_t* opt);
-
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transactiondb_options_set_transaction_lock_timeout(
     rocksdb_transactiondb_options_t* opt, int64_t v);
 
-extern ROCKSDB_LIBRARY_API int64_t
-rocksdb_transactiondb_options_get_transaction_lock_timeout(
-    rocksdb_transactiondb_options_t* opt);
-
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transactiondb_options_set_default_lock_timeout(
     rocksdb_transactiondb_options_t* opt, int64_t v);
-
-extern ROCKSDB_LIBRARY_API int64_t
-rocksdb_transactiondb_options_get_default_lock_timeout(
-    rocksdb_transactiondb_options_t* opt);
-
-extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_options_set_write_policy(
-    rocksdb_transactiondb_options_t* opt, int v);
-
-extern ROCKSDB_LIBRARY_API int rocksdb_transactiondb_options_get_write_policy(
-    rocksdb_transactiondb_options_t* opt);
 
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transactiondb_options_set_rollback_merge_operands(
@@ -1590,16 +1558,8 @@ rocksdb_transactiondb_options_get_txn_commit_bypass_memtable_threshold(
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_options_set_set_snapshot(
     rocksdb_transaction_options_t* opt, unsigned char v);
 
-extern ROCKSDB_LIBRARY_API unsigned char
-rocksdb_transaction_options_get_set_snapshot(
-    rocksdb_transaction_options_t* opt);
-
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_options_set_deadlock_detect(
     rocksdb_transaction_options_t* opt, unsigned char v);
-
-extern ROCKSDB_LIBRARY_API unsigned char
-rocksdb_transaction_options_get_deadlock_detect(
-    rocksdb_transaction_options_t* opt);
 
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transaction_options_set_use_only_the_last_commit_time_batch_for_recovery(
@@ -1612,9 +1572,6 @@ rocksdb_transaction_options_get_use_only_the_last_commit_time_batch_for_recovery
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_options_set_lock_timeout(
     rocksdb_transaction_options_t* opt, int64_t v);
 
-extern ROCKSDB_LIBRARY_API int64_t rocksdb_transaction_options_get_lock_timeout(
-    rocksdb_transaction_options_t* opt);
-
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transaction_options_set_deadlock_timeout_us(
     rocksdb_transaction_options_t* opt, int64_t v);
@@ -1626,24 +1583,13 @@ rocksdb_transaction_options_get_deadlock_timeout_us(
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_options_set_expiration(
     rocksdb_transaction_options_t* opt, int64_t v);
 
-extern ROCKSDB_LIBRARY_API int64_t
-rocksdb_transaction_options_get_expiration(rocksdb_transaction_options_t* opt);
-
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transaction_options_set_deadlock_detect_depth(
     rocksdb_transaction_options_t* opt, int64_t v);
 
-extern ROCKSDB_LIBRARY_API int64_t
-rocksdb_transaction_options_get_deadlock_detect_depth(
-    rocksdb_transaction_options_t* opt);
-
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transaction_options_set_max_write_batch_size(
     rocksdb_transaction_options_t* opt, size_t v);
-
-extern ROCKSDB_LIBRARY_API size_t
-rocksdb_transaction_options_get_max_write_batch_size(
-    rocksdb_transaction_options_t* opt);
 
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transaction_options_set_skip_concurrency_control(
@@ -1655,10 +1601,6 @@ rocksdb_transaction_options_get_skip_concurrency_control(
 
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_options_set_skip_prepare(
     rocksdb_transaction_options_t* opt, unsigned char v);
-
-extern ROCKSDB_LIBRARY_API unsigned char
-rocksdb_transaction_options_get_skip_prepare(
-    rocksdb_transaction_options_t* opt);
 
 extern ROCKSDB_LIBRARY_API void
 rocksdb_transaction_options_set_write_batch_flush_threshold(
@@ -1705,10 +1647,6 @@ rocksdb_transaction_options_get_large_txn_commit_optimize_byte_threshold(
 extern ROCKSDB_LIBRARY_API void
 rocksdb_optimistictransaction_options_set_set_snapshot(
     rocksdb_optimistictransaction_options_t* opt, unsigned char v);
-
-extern ROCKSDB_LIBRARY_API unsigned char
-rocksdb_optimistictransaction_options_get_set_snapshot(
-    rocksdb_optimistictransaction_options_t* opt);
 
 /* OptimisticTransactionDBOptions */
 

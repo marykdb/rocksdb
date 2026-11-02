@@ -6,6 +6,7 @@
 #pragma once
 #include <atomic>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,7 @@ class StatisticsImpl : public Statistics {
   std::string ToString() const override;
   bool getTickerMap(std::map<std::string, uint64_t>*) const override;
   bool HistEnabledForType(uint32_t type) const override;
+  void SetHistograms(const std::vector<uint32_t>& histogram_types) override;
 
   const Customizable* Inner() const override { return stats_.get(); }
 
@@ -104,6 +106,8 @@ class StatisticsImpl : public Statistics {
 #endif
 
   CoreLocalArray<StatisticsData> per_core_stats_;
+
+  std::shared_ptr<const std::vector<char>> histogram_enabled_mask_;
 
   uint64_t getTickerCountLocked(uint32_t ticker_type) const;
   std::unique_ptr<HistogramImpl> getHistogramImplLocked(

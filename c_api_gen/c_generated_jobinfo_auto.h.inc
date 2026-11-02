@@ -20,9 +20,6 @@
 
 /* FlushJobInfo */
 
-extern ROCKSDB_LIBRARY_API uint32_t
-rocksdb_flushjobinfo_cf_id(const rocksdb_flushjobinfo_t* info);
-
 extern ROCKSDB_LIBRARY_API const char* rocksdb_flushjobinfo_cf_name(
     const rocksdb_flushjobinfo_t* info, size_t* size);
 
@@ -34,12 +31,6 @@ rocksdb_flushjobinfo_file_number(const rocksdb_flushjobinfo_t* info);
 
 extern ROCKSDB_LIBRARY_API uint64_t
 rocksdb_flushjobinfo_oldest_blob_file_number(
-    const rocksdb_flushjobinfo_t* info);
-
-extern ROCKSDB_LIBRARY_API uint64_t
-rocksdb_flushjobinfo_thread_id(const rocksdb_flushjobinfo_t* info);
-
-extern ROCKSDB_LIBRARY_API int rocksdb_flushjobinfo_job_id(
     const rocksdb_flushjobinfo_t* info);
 
 extern ROCKSDB_LIBRARY_API unsigned char
@@ -56,9 +47,6 @@ extern ROCKSDB_LIBRARY_API uint64_t
 rocksdb_flushjobinfo_largest_seqno(const rocksdb_flushjobinfo_t* info);
 
 extern ROCKSDB_LIBRARY_API uint32_t
-rocksdb_flushjobinfo_flush_reason(const rocksdb_flushjobinfo_t* info);
-
-extern ROCKSDB_LIBRARY_API uint32_t
 rocksdb_flushjobinfo_blob_compression_type(const rocksdb_flushjobinfo_t* info);
 
 /* CompactionJobInfo */
@@ -72,12 +60,6 @@ extern ROCKSDB_LIBRARY_API const char* rocksdb_compactionjobinfo_cf_name(
 extern ROCKSDB_LIBRARY_API void rocksdb_compactionjobinfo_status(
     const rocksdb_compactionjobinfo_t* info, char** errptr);
 
-extern ROCKSDB_LIBRARY_API uint64_t
-rocksdb_compactionjobinfo_thread_id(const rocksdb_compactionjobinfo_t* info);
-
-extern ROCKSDB_LIBRARY_API int rocksdb_compactionjobinfo_job_id(
-    const rocksdb_compactionjobinfo_t* info);
-
 extern ROCKSDB_LIBRARY_API int rocksdb_compactionjobinfo_num_l0_files(
     const rocksdb_compactionjobinfo_t* info);
 
@@ -89,9 +71,6 @@ extern ROCKSDB_LIBRARY_API int rocksdb_compactionjobinfo_output_level(
 
 extern ROCKSDB_LIBRARY_API uint32_t rocksdb_compactionjobinfo_compaction_reason(
     const rocksdb_compactionjobinfo_t* info);
-
-extern ROCKSDB_LIBRARY_API uint32_t
-rocksdb_compactionjobinfo_compression(const rocksdb_compactionjobinfo_t* info);
 
 extern ROCKSDB_LIBRARY_API uint32_t
 rocksdb_compactionjobinfo_blob_compression_type(
@@ -145,16 +124,8 @@ rocksdb_externalfileingestioninfo_cf_name(
     const rocksdb_externalfileingestioninfo_t* info, size_t* size);
 
 extern ROCKSDB_LIBRARY_API const char*
-rocksdb_externalfileingestioninfo_external_file_path(
-    const rocksdb_externalfileingestioninfo_t* info, size_t* size);
-
-extern ROCKSDB_LIBRARY_API const char*
 rocksdb_externalfileingestioninfo_internal_file_path(
     const rocksdb_externalfileingestioninfo_t* info, size_t* size);
-
-extern ROCKSDB_LIBRARY_API uint64_t
-rocksdb_externalfileingestioninfo_global_seqno(
-    const rocksdb_externalfileingestioninfo_t* info);
 
 /* MemTableInfo */
 

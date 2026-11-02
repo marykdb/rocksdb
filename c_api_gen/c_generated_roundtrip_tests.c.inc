@@ -342,12 +342,6 @@ static void rocksdb_roundtrip_test_rocksdb_create_backup_options(void) {
   CheckCondition(
       rocksdb_create_backup_options_get_decrease_background_thread_cpu_priority(
           obj) == 0);
-  rocksdb_create_backup_options_set_flush_before_backup(obj, 1);
-  CheckCondition(rocksdb_create_backup_options_get_flush_before_backup(obj) ==
-                 1);
-  rocksdb_create_backup_options_set_flush_before_backup(obj, 0);
-  CheckCondition(rocksdb_create_backup_options_get_flush_before_backup(obj) ==
-                 0);
   rocksdb_create_backup_options_destroy(obj);
 }
 
@@ -455,10 +449,6 @@ static void rocksdb_roundtrip_test_rocksdb_fifo_compaction_options(void) {
 
 static void rocksdb_roundtrip_test_rocksdb_flushoptions(void) {
   rocksdb_flushoptions_t* obj = rocksdb_flushoptions_create();
-  rocksdb_flushoptions_set_allow_write_stall(obj, 1);
-  CheckCondition(rocksdb_flushoptions_get_allow_write_stall(obj) == 1);
-  rocksdb_flushoptions_set_allow_write_stall(obj, 0);
-  CheckCondition(rocksdb_flushoptions_get_allow_write_stall(obj) == 0);
   rocksdb_flushoptions_set_force_atomic_flush(obj, 1);
   CheckCondition(rocksdb_flushoptions_get_force_atomic_flush(obj) == 1);
   rocksdb_flushoptions_set_force_atomic_flush(obj, 0);
@@ -1103,24 +1093,10 @@ static void rocksdb_roundtrip_test_rocksdb_transaction_options(void) {
   rocksdb_transaction_options_set_commit_bypass_memtable(obj, 0);
   CheckCondition(rocksdb_transaction_options_get_commit_bypass_memtable(obj) ==
                  0);
-  rocksdb_transaction_options_set_deadlock_detect(obj, 1);
-  CheckCondition(rocksdb_transaction_options_get_deadlock_detect(obj) == 1);
-  rocksdb_transaction_options_set_deadlock_detect(obj, 0);
-  CheckCondition(rocksdb_transaction_options_get_deadlock_detect(obj) == 0);
-  rocksdb_transaction_options_set_deadlock_detect_depth(obj, 1);
-  CheckCondition(rocksdb_transaction_options_get_deadlock_detect_depth(obj) ==
-                 1);
-  rocksdb_transaction_options_set_deadlock_detect_depth(obj, 0);
-  CheckCondition(rocksdb_transaction_options_get_deadlock_detect_depth(obj) ==
-                 0);
   rocksdb_transaction_options_set_deadlock_timeout_us(obj, 1);
   CheckCondition(rocksdb_transaction_options_get_deadlock_timeout_us(obj) == 1);
   rocksdb_transaction_options_set_deadlock_timeout_us(obj, 0);
   CheckCondition(rocksdb_transaction_options_get_deadlock_timeout_us(obj) == 0);
-  rocksdb_transaction_options_set_expiration(obj, 1);
-  CheckCondition(rocksdb_transaction_options_get_expiration(obj) == 1);
-  rocksdb_transaction_options_set_expiration(obj, 0);
-  CheckCondition(rocksdb_transaction_options_get_expiration(obj) == 0);
   rocksdb_transaction_options_set_large_txn_commit_optimize_byte_threshold(obj,
                                                                            1);
   CheckCondition(
@@ -1139,26 +1115,12 @@ static void rocksdb_roundtrip_test_rocksdb_transaction_options(void) {
   CheckCondition(
       rocksdb_transaction_options_get_large_txn_commit_optimize_threshold(
           obj) == 0);
-  rocksdb_transaction_options_set_lock_timeout(obj, 1);
-  CheckCondition(rocksdb_transaction_options_get_lock_timeout(obj) == 1);
-  rocksdb_transaction_options_set_lock_timeout(obj, 0);
-  CheckCondition(rocksdb_transaction_options_get_lock_timeout(obj) == 0);
-  rocksdb_transaction_options_set_max_write_batch_size(obj, 1);
-  CheckCondition(rocksdb_transaction_options_get_max_write_batch_size(obj) ==
-                 1);
-  rocksdb_transaction_options_set_max_write_batch_size(obj, 0);
-  CheckCondition(rocksdb_transaction_options_get_max_write_batch_size(obj) ==
-                 0);
   rocksdb_transaction_options_set_skip_concurrency_control(obj, 1);
   CheckCondition(
       rocksdb_transaction_options_get_skip_concurrency_control(obj) == 1);
   rocksdb_transaction_options_set_skip_concurrency_control(obj, 0);
   CheckCondition(
       rocksdb_transaction_options_get_skip_concurrency_control(obj) == 0);
-  rocksdb_transaction_options_set_skip_prepare(obj, 1);
-  CheckCondition(rocksdb_transaction_options_get_skip_prepare(obj) == 1);
-  rocksdb_transaction_options_set_skip_prepare(obj, 0);
-  CheckCondition(rocksdb_transaction_options_get_skip_prepare(obj) == 0);
   rocksdb_transaction_options_set_use_only_the_last_commit_time_batch_for_recovery(
       obj, 1);
   CheckCondition(
@@ -1188,12 +1150,6 @@ static void rocksdb_roundtrip_test_rocksdb_transaction_options(void) {
 
 static void rocksdb_roundtrip_test_rocksdb_transactiondb_options(void) {
   rocksdb_transactiondb_options_t* obj = rocksdb_transactiondb_options_create();
-  rocksdb_transactiondb_options_set_default_lock_timeout(obj, 1);
-  CheckCondition(rocksdb_transactiondb_options_get_default_lock_timeout(obj) ==
-                 1);
-  rocksdb_transactiondb_options_set_default_lock_timeout(obj, 0);
-  CheckCondition(rocksdb_transactiondb_options_get_default_lock_timeout(obj) ==
-                 0);
   rocksdb_transactiondb_options_set_default_write_batch_flush_threshold(obj, 1);
   CheckCondition(
       rocksdb_transactiondb_options_get_default_write_batch_flush_threshold(
@@ -1212,14 +1168,6 @@ static void rocksdb_roundtrip_test_rocksdb_transactiondb_options(void) {
   CheckCondition(rocksdb_transactiondb_options_get_max_num_deadlocks(obj) == 1);
   rocksdb_transactiondb_options_set_max_num_deadlocks(obj, 0);
   CheckCondition(rocksdb_transactiondb_options_get_max_num_deadlocks(obj) == 0);
-  rocksdb_transactiondb_options_set_max_num_locks(obj, 1);
-  CheckCondition(rocksdb_transactiondb_options_get_max_num_locks(obj) == 1);
-  rocksdb_transactiondb_options_set_max_num_locks(obj, 0);
-  CheckCondition(rocksdb_transactiondb_options_get_max_num_locks(obj) == 0);
-  rocksdb_transactiondb_options_set_num_stripes(obj, 1);
-  CheckCondition(rocksdb_transactiondb_options_get_num_stripes(obj) == 1);
-  rocksdb_transactiondb_options_set_num_stripes(obj, 0);
-  CheckCondition(rocksdb_transactiondb_options_get_num_stripes(obj) == 0);
   rocksdb_transactiondb_options_set_rollback_merge_operands(obj, 1);
   CheckCondition(
       rocksdb_transactiondb_options_get_rollback_merge_operands(obj) == 1);
@@ -1232,12 +1180,6 @@ static void rocksdb_roundtrip_test_rocksdb_transactiondb_options(void) {
   rocksdb_transactiondb_options_set_skip_concurrency_control(obj, 0);
   CheckCondition(
       rocksdb_transactiondb_options_get_skip_concurrency_control(obj) == 0);
-  rocksdb_transactiondb_options_set_transaction_lock_timeout(obj, 1);
-  CheckCondition(
-      rocksdb_transactiondb_options_get_transaction_lock_timeout(obj) == 1);
-  rocksdb_transactiondb_options_set_transaction_lock_timeout(obj, 0);
-  CheckCondition(
-      rocksdb_transactiondb_options_get_transaction_lock_timeout(obj) == 0);
   rocksdb_transactiondb_options_set_txn_commit_bypass_memtable_threshold(obj,
                                                                          1);
   CheckCondition(
@@ -1254,10 +1196,6 @@ static void rocksdb_roundtrip_test_rocksdb_transactiondb_options(void) {
   rocksdb_transactiondb_options_set_use_per_key_point_lock_mgr(obj, 0);
   CheckCondition(
       rocksdb_transactiondb_options_get_use_per_key_point_lock_mgr(obj) == 0);
-  rocksdb_transactiondb_options_set_write_policy(obj, 1);
-  CheckCondition(rocksdb_transactiondb_options_get_write_policy(obj) == 1);
-  rocksdb_transactiondb_options_set_write_policy(obj, 0);
-  CheckCondition(rocksdb_transactiondb_options_get_write_policy(obj) == 0);
   rocksdb_transactiondb_options_destroy(obj);
 }
 

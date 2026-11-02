@@ -1667,11 +1667,6 @@ unsigned char rocksdb_flushoptions_get_wait(rocksdb_flushoptions_t* opt) {
   return opt->rep.wait;
 }
 
-void rocksdb_flushoptions_set_allow_write_stall(rocksdb_flushoptions_t* opt,
-                                                unsigned char v) {
-  opt->rep.allow_write_stall = v;
-}
-
 unsigned char rocksdb_flushoptions_get_allow_write_stall(
     rocksdb_flushoptions_t* opt) {
   return opt->rep.allow_write_stall;
@@ -2113,11 +2108,6 @@ unsigned char rocksdb_open_and_compact_options_get_allow_resumption(
 }
 
 /* ImportColumnFamilyOptions */
-
-unsigned char rocksdb_import_column_family_options_get_move_files(
-    rocksdb_import_column_family_options_t* opt) {
-  return opt->rep.move_files;
-}
 
 /* SizeApproximationOptions */
 
@@ -2903,11 +2893,6 @@ int rocksdb_create_backup_options_get_background_thread_cpu_priority(
   return static_cast<int>(opt->rep.background_thread_cpu_priority);
 }
 
-void rocksdb_create_backup_options_set_flush_before_backup(
-    rocksdb_create_backup_options_t* opt, unsigned char v) {
-  opt->rep.flush_before_backup = v;
-}
-
 unsigned char rocksdb_create_backup_options_get_flush_before_backup(
     rocksdb_create_backup_options_t* opt) {
   return opt->rep.flush_before_backup;
@@ -2950,11 +2935,6 @@ void rocksdb_transactiondb_options_set_max_num_locks(
   opt->rep.max_num_locks = v;
 }
 
-int64_t rocksdb_transactiondb_options_get_max_num_locks(
-    rocksdb_transactiondb_options_t* opt) {
-  return opt->rep.max_num_locks;
-}
-
 void rocksdb_transactiondb_options_set_max_num_deadlocks(
     rocksdb_transactiondb_options_t* opt, uint32_t v) {
   opt->rep.max_num_deadlocks = v;
@@ -2970,39 +2950,14 @@ void rocksdb_transactiondb_options_set_num_stripes(
   opt->rep.num_stripes = v;
 }
 
-size_t rocksdb_transactiondb_options_get_num_stripes(
-    rocksdb_transactiondb_options_t* opt) {
-  return opt->rep.num_stripes;
-}
-
 void rocksdb_transactiondb_options_set_transaction_lock_timeout(
     rocksdb_transactiondb_options_t* opt, int64_t v) {
   opt->rep.transaction_lock_timeout = v;
 }
 
-int64_t rocksdb_transactiondb_options_get_transaction_lock_timeout(
-    rocksdb_transactiondb_options_t* opt) {
-  return opt->rep.transaction_lock_timeout;
-}
-
 void rocksdb_transactiondb_options_set_default_lock_timeout(
     rocksdb_transactiondb_options_t* opt, int64_t v) {
   opt->rep.default_lock_timeout = v;
-}
-
-int64_t rocksdb_transactiondb_options_get_default_lock_timeout(
-    rocksdb_transactiondb_options_t* opt) {
-  return opt->rep.default_lock_timeout;
-}
-
-void rocksdb_transactiondb_options_set_write_policy(
-    rocksdb_transactiondb_options_t* opt, int v) {
-  opt->rep.write_policy = static_cast<decltype(opt->rep.write_policy)>(v);
-}
-
-int rocksdb_transactiondb_options_get_write_policy(
-    rocksdb_transactiondb_options_t* opt) {
-  return static_cast<int>(opt->rep.write_policy);
 }
 
 void rocksdb_transactiondb_options_set_rollback_merge_operands(
@@ -3072,19 +3027,9 @@ void rocksdb_transaction_options_set_set_snapshot(
   opt->rep.set_snapshot = v;
 }
 
-unsigned char rocksdb_transaction_options_get_set_snapshot(
-    rocksdb_transaction_options_t* opt) {
-  return opt->rep.set_snapshot;
-}
-
 void rocksdb_transaction_options_set_deadlock_detect(
     rocksdb_transaction_options_t* opt, unsigned char v) {
   opt->rep.deadlock_detect = v;
-}
-
-unsigned char rocksdb_transaction_options_get_deadlock_detect(
-    rocksdb_transaction_options_t* opt) {
-  return opt->rep.deadlock_detect;
 }
 
 void rocksdb_transaction_options_set_use_only_the_last_commit_time_batch_for_recovery(
@@ -3103,11 +3048,6 @@ void rocksdb_transaction_options_set_lock_timeout(
   opt->rep.lock_timeout = v;
 }
 
-int64_t rocksdb_transaction_options_get_lock_timeout(
-    rocksdb_transaction_options_t* opt) {
-  return opt->rep.lock_timeout;
-}
-
 void rocksdb_transaction_options_set_deadlock_timeout_us(
     rocksdb_transaction_options_t* opt, int64_t v) {
   opt->rep.deadlock_timeout_us = v;
@@ -3123,29 +3063,14 @@ void rocksdb_transaction_options_set_expiration(
   opt->rep.expiration = v;
 }
 
-int64_t rocksdb_transaction_options_get_expiration(
-    rocksdb_transaction_options_t* opt) {
-  return opt->rep.expiration;
-}
-
 void rocksdb_transaction_options_set_deadlock_detect_depth(
     rocksdb_transaction_options_t* opt, int64_t v) {
   opt->rep.deadlock_detect_depth = v;
 }
 
-int64_t rocksdb_transaction_options_get_deadlock_detect_depth(
-    rocksdb_transaction_options_t* opt) {
-  return opt->rep.deadlock_detect_depth;
-}
-
 void rocksdb_transaction_options_set_max_write_batch_size(
     rocksdb_transaction_options_t* opt, size_t v) {
   opt->rep.max_write_batch_size = v;
-}
-
-size_t rocksdb_transaction_options_get_max_write_batch_size(
-    rocksdb_transaction_options_t* opt) {
-  return opt->rep.max_write_batch_size;
 }
 
 void rocksdb_transaction_options_set_skip_concurrency_control(
@@ -3161,11 +3086,6 @@ unsigned char rocksdb_transaction_options_get_skip_concurrency_control(
 void rocksdb_transaction_options_set_skip_prepare(
     rocksdb_transaction_options_t* opt, unsigned char v) {
   opt->rep.skip_prepare = v;
-}
-
-unsigned char rocksdb_transaction_options_get_skip_prepare(
-    rocksdb_transaction_options_t* opt) {
-  return opt->rep.skip_prepare;
 }
 
 void rocksdb_transaction_options_set_write_batch_flush_threshold(
@@ -3224,11 +3144,6 @@ rocksdb_transaction_options_get_large_txn_commit_optimize_byte_threshold(
 void rocksdb_optimistictransaction_options_set_set_snapshot(
     rocksdb_optimistictransaction_options_t* opt, unsigned char v) {
   opt->rep.set_snapshot = v;
-}
-
-unsigned char rocksdb_optimistictransaction_options_get_set_snapshot(
-    rocksdb_optimistictransaction_options_t* opt) {
-  return opt->rep.set_snapshot;
 }
 
 /* OptimisticTransactionDBOptions */

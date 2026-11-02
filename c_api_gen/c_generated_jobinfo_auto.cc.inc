@@ -20,10 +20,6 @@
 
 /* FlushJobInfo */
 
-uint32_t rocksdb_flushjobinfo_cf_id(const rocksdb_flushjobinfo_t* info) {
-  return info->rep.cf_id;
-}
-
 const char* rocksdb_flushjobinfo_cf_name(const rocksdb_flushjobinfo_t* info,
                                          size_t* size) {
   *size = info->rep.cf_name.size();
@@ -45,14 +41,6 @@ uint64_t rocksdb_flushjobinfo_oldest_blob_file_number(
   return info->rep.oldest_blob_file_number;
 }
 
-uint64_t rocksdb_flushjobinfo_thread_id(const rocksdb_flushjobinfo_t* info) {
-  return info->rep.thread_id;
-}
-
-int rocksdb_flushjobinfo_job_id(const rocksdb_flushjobinfo_t* info) {
-  return info->rep.job_id;
-}
-
 unsigned char rocksdb_flushjobinfo_triggered_writes_slowdown(
     const rocksdb_flushjobinfo_t* info) {
   return info->rep.triggered_writes_slowdown;
@@ -71,10 +59,6 @@ uint64_t rocksdb_flushjobinfo_smallest_seqno(
 uint64_t rocksdb_flushjobinfo_largest_seqno(
     const rocksdb_flushjobinfo_t* info) {
   return info->rep.largest_seqno;
-}
-
-uint32_t rocksdb_flushjobinfo_flush_reason(const rocksdb_flushjobinfo_t* info) {
-  return static_cast<uint32_t>(info->rep.flush_reason);
 }
 
 uint32_t rocksdb_flushjobinfo_blob_compression_type(
@@ -100,15 +84,6 @@ void rocksdb_compactionjobinfo_status(const rocksdb_compactionjobinfo_t* info,
   SaveError(errptr, info->rep.status);
 }
 
-uint64_t rocksdb_compactionjobinfo_thread_id(
-    const rocksdb_compactionjobinfo_t* info) {
-  return info->rep.thread_id;
-}
-
-int rocksdb_compactionjobinfo_job_id(const rocksdb_compactionjobinfo_t* info) {
-  return info->rep.job_id;
-}
-
 int rocksdb_compactionjobinfo_num_l0_files(
     const rocksdb_compactionjobinfo_t* info) {
   return info->rep.num_l0_files;
@@ -127,11 +102,6 @@ int rocksdb_compactionjobinfo_output_level(
 uint32_t rocksdb_compactionjobinfo_compaction_reason(
     const rocksdb_compactionjobinfo_t* info) {
   return static_cast<uint32_t>(info->rep.compaction_reason);
-}
-
-uint32_t rocksdb_compactionjobinfo_compression(
-    const rocksdb_compactionjobinfo_t* info) {
-  return static_cast<uint32_t>(info->rep.compression);
 }
 
 uint32_t rocksdb_compactionjobinfo_blob_compression_type(
@@ -210,21 +180,10 @@ const char* rocksdb_externalfileingestioninfo_cf_name(
   return info->rep.cf_name.data();
 }
 
-const char* rocksdb_externalfileingestioninfo_external_file_path(
-    const rocksdb_externalfileingestioninfo_t* info, size_t* size) {
-  *size = info->rep.external_file_path.size();
-  return info->rep.external_file_path.data();
-}
-
 const char* rocksdb_externalfileingestioninfo_internal_file_path(
     const rocksdb_externalfileingestioninfo_t* info, size_t* size) {
   *size = info->rep.internal_file_path.size();
   return info->rep.internal_file_path.data();
-}
-
-uint64_t rocksdb_externalfileingestioninfo_global_seqno(
-    const rocksdb_externalfileingestioninfo_t* info) {
-  return info->rep.global_seqno;
 }
 
 /* MemTableInfo */

@@ -158,14 +158,6 @@ void rocksdb_flush_wal(rocksdb_t* db, unsigned char sync, char** errptr) {
   SaveError(errptr, db->rep->FlushWAL(sync));
 }
 
-void rocksdb_pause_background_work(rocksdb_t* db, char** errptr) {
-  SaveError(errptr, db->rep->PauseBackgroundWork());
-}
-
-void rocksdb_continue_background_work(rocksdb_t* db, char** errptr) {
-  SaveError(errptr, db->rep->ContinueBackgroundWork());
-}
-
 void rocksdb_disable_file_deletions(rocksdb_t* db, char** errptr) {
   SaveError(errptr, db->rep->DisableFileDeletions());
 }

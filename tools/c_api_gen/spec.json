@@ -613,32 +613,6 @@
         },
         {
           "kind": "status_method",
-          "name": "rocksdb_pause_background_work",
-          "call_expr": "db->rep->PauseBackgroundWork",
-          "params": [
-            {
-              "kind": "scalar",
-              "c_type": "rocksdb_t*",
-              "name": "db"
-            }
-          ],
-          "method_args": []
-        },
-        {
-          "kind": "status_method",
-          "name": "rocksdb_continue_background_work",
-          "call_expr": "db->rep->ContinueBackgroundWork",
-          "params": [
-            {
-              "kind": "scalar",
-              "c_type": "rocksdb_t*",
-              "name": "db"
-            }
-          ],
-          "method_args": []
-        },
-        {
-          "kind": "status_method",
           "name": "rocksdb_disable_file_deletions",
           "call_expr": "db->rep->DisableFileDeletions",
           "params": [
@@ -752,7 +726,7 @@
           "method_args": []
         },
         {
-          "kind": "void_method",
+          "kind": "status_method",
           "name": "rocksdb_writebatch_put",
           "call_expr": "b->rep.Put",
           "params": [
@@ -778,7 +752,7 @@
           ]
         },
         {
-          "kind": "void_method",
+          "kind": "status_method",
           "name": "rocksdb_writebatch_put_cf",
           "call_expr": "b->rep.Put",
           "params": [
@@ -810,7 +784,7 @@
           ]
         },
         {
-          "kind": "void_method",
+          "kind": "status_method",
           "name": "rocksdb_writebatch_delete",
           "call_expr": "b->rep.Delete",
           "params": [
@@ -830,7 +804,7 @@
           ]
         },
         {
-          "kind": "void_method",
+          "kind": "status_method",
           "name": "rocksdb_writebatch_put_log_data",
           "call_expr": "b->rep.PutLogData",
           "params": [

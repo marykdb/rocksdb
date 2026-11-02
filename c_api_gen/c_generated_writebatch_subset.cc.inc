@@ -22,25 +22,27 @@
 void rocksdb_writebatch_clear(rocksdb_writebatch_t* b) { b->rep.Clear(); }
 
 void rocksdb_writebatch_put(rocksdb_writebatch_t* b, const char* key,
-                            size_t klen, const char* val, size_t vlen) {
-  b->rep.Put(Slice(key, klen), Slice(val, vlen));
+                            size_t klen, const char* val, size_t vlen,
+                            char** errptr) {
+  SaveError(errptr, b->rep.Put(Slice(key, klen), Slice(val, vlen)));
 }
 
 void rocksdb_writebatch_put_cf(rocksdb_writebatch_t* b,
                                rocksdb_column_family_handle_t* column_family,
                                const char* key, size_t klen, const char* val,
-                               size_t vlen) {
-  b->rep.Put(column_family->rep, Slice(key, klen), Slice(val, vlen));
+                               size_t vlen, char** errptr) {
+  SaveError(errptr,
+            b->rep.Put(column_family->rep, Slice(key, klen), Slice(val, vlen)));
 }
 
 void rocksdb_writebatch_delete(rocksdb_writebatch_t* b, const char* key,
-                               size_t klen) {
-  b->rep.Delete(Slice(key, klen));
+                               size_t klen, char** errptr) {
+  SaveError(errptr, b->rep.Delete(Slice(key, klen)));
 }
 
 void rocksdb_writebatch_put_log_data(rocksdb_writebatch_t* b, const char* blob,
-                                     size_t len) {
-  b->rep.PutLogData(Slice(blob, len));
+                                     size_t len, char** errptr) {
+  SaveError(errptr, b->rep.PutLogData(Slice(blob, len)));
 }
 
 void rocksdb_writebatch_set_save_point(rocksdb_writebatch_t* b) {

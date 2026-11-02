@@ -653,8 +653,37 @@ bool StatisticsImpl::getTickerMap(
   return true;
 }
 
+void StatisticsImpl::SetHistograms(
+    const std::vector<uint32_t>& histogram_types) {
+  if (histogram_types.empty()) {
+    std::atomic_store(&histogram_enabled_mask_,
+                      std::shared_ptr<const std::vector<char>>());
+    return;
+  }
+  auto mask = std::make_shared<std::vector<char>>(INTERNAL_HISTOGRAM_ENUM_MAX,
+                                                  static_cast<char>(0));
+  for (uint32_t type : histogram_types) {
+    if (type < INTERNAL_HISTOGRAM_ENUM_MAX) {
+      (*mask)[type] = static_cast<char>(1);
+    }
+  }
+  std::shared_ptr<const std::vector<char>> const_mask = mask;
+  std::atomic_store(&histogram_enabled_mask_, const_mask);
+}
+
 bool StatisticsImpl::HistEnabledForType(uint32_t type) const {
-  return type < HISTOGRAM_ENUM_MAX;
+  if (type >= HISTOGRAM_ENUM_MAX) {
+    return false;
+  }
+  std::shared_ptr<const std::vector<char>> mask =
+      std::atomic_load(&histogram_enabled_mask_);
+  if (!mask) {
+    return true;
+  }
+  if (type >= mask->size()) {
+    return false;
+  }
+  return (*mask)[type] != 0;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

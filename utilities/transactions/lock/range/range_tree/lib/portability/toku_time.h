@@ -137,6 +137,12 @@ static inline tokutime_t toku_time_now(void) {
   uint64_t result;
   asm volatile("stckf %0" : "=Q"(result) : : "cc");
   return result;
+#elif defined(__arm__)
+  // ARM32 performance counters may be privileged on Android. Use a monotonic
+  // clock so lock timing cannot fault or jump when wall-clock time changes.
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
 #elif defined(__riscv) && __riscv_xlen == 32
   uint32_t cycles_lo, cycles_hi0, cycles_hi1;
   // Implemented in assembly because Clang insisted on branching.

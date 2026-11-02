@@ -56,6 +56,24 @@
 #define F_SET_RW_HINT (F_LINUX_SPECIFIC_BASE + 12)
 #endif
 
+#if defined(OS_ANDROID)
+#ifndef POSIX_MADV_NORMAL
+#define POSIX_MADV_NORMAL MADV_NORMAL
+#endif
+#ifndef POSIX_MADV_RANDOM
+#define POSIX_MADV_RANDOM MADV_RANDOM
+#endif
+#ifndef POSIX_MADV_SEQUENTIAL
+#define POSIX_MADV_SEQUENTIAL MADV_SEQUENTIAL
+#endif
+#ifndef POSIX_MADV_WILLNEED
+#define POSIX_MADV_WILLNEED MADV_WILLNEED
+#endif
+#ifndef POSIX_MADV_DONTNEED
+#define POSIX_MADV_DONTNEED MADV_DONTNEED
+#endif
+#endif
+
 namespace ROCKSDB_NAMESPACE {
 
 std::string IOErrorMsg(const std::string& context,

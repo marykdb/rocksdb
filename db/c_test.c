@@ -1795,6 +1795,40 @@ static void TestCommonMemtables(void) {
 }
 
 static void TestCommonExpansion(void) {
+  StartPhase("common_expansion_native_integer_widths");
+  {
+    rocksdb_mutable_cf_options_t* options = rocksdb_mutable_cf_options_create();
+    const struct {
+      void (*set)(rocksdb_mutable_cf_options_t*, size_t);
+      size_t (*get)(const rocksdb_mutable_cf_options_t*);
+    } sized[] = {
+        {rocksdb_mutable_cf_options_set_arena_block_size,
+         rocksdb_mutable_cf_options_get_arena_block_size},
+        {rocksdb_mutable_cf_options_set_memtable_huge_page_size,
+         rocksdb_mutable_cf_options_get_memtable_huge_page_size},
+        {rocksdb_mutable_cf_options_set_max_successive_merges,
+         rocksdb_mutable_cf_options_get_max_successive_merges},
+        {rocksdb_mutable_cf_options_set_inplace_update_num_locks,
+         rocksdb_mutable_cf_options_get_inplace_update_num_locks},
+    };
+    size_t index;
+    for (index = 0; index < sizeof(sized) / sizeof(sized[0]); ++index) {
+      sized[index].set(options, SIZE_MAX);
+      CheckCondition(sized[index].get(options) == SIZE_MAX);
+      sized[index].set(options, 0);
+      CheckCondition(sized[index].get(options) == 0);
+    }
+    void (*set_unsigned)(rocksdb_mutable_cf_options_t*, uint32_t) =
+        rocksdb_mutable_cf_options_set_min_tombstones_for_range_conversion;
+    uint32_t (*get_unsigned)(const rocksdb_mutable_cf_options_t*) =
+        rocksdb_mutable_cf_options_get_min_tombstones_for_range_conversion;
+    set_unsigned(options, UINT32_MAX);
+    CheckCondition(get_unsigned(options) == UINT32_MAX);
+    set_unsigned(options, 0);
+    CheckCondition(get_unsigned(options) == 0);
+    rocksdb_mutable_cf_options_destroy(options);
+  }
+
   char path[260];
   char* err = NULL;
   char* before_db;
@@ -2587,6 +2621,29 @@ int main(int argc, char** argv) {
             db_import, db_options, "cf_import", strlen("cf_import"),
             import_options, export_metadata, &err);
     CheckNoError(err);
+    const char imported_binary_name[] = {'i', '\0', 'm', (char)0x80};
+    const rocksdb_export_import_files_metadata_t* import_list[] = {
+        export_metadata};
+    rocksdb_column_family_handle_t* cf_import_list =
+        rocksdb_create_column_family_with_import_list(
+            db_import, db_options, imported_binary_name,
+            sizeof(imported_binary_name), import_options, import_list,
+            sizeof(import_list) / sizeof(import_list[0]), &err);
+    CheckNoError(err);
+    size_t imported_name_length;
+    char* imported_name = rocksdb_column_family_handle_get_name(
+        cf_import_list, &imported_name_length);
+    CheckCondition(imported_name_length == sizeof(imported_binary_name));
+    CheckCondition(
+        memcmp(imported_name, imported_binary_name, imported_name_length) == 0);
+    free(imported_name);
+    size_t list_value_len;
+    char* list_value = rocksdb_get_cf(db_import, roptions, cf_import_list, "k1",
+                                      2, &list_value_len, &err);
+    CheckNoError(err);
+    CheckEqual("v1", list_value, list_value_len);
+    free(list_value);
+    rocksdb_column_family_handle_destroy(cf_import_list);
     rocksdb_import_column_family_options_destroy(import_options);
     rocksdb_export_import_files_metadata_destroy(export_metadata);
     size_t val_len;

@@ -12101,31 +12101,31 @@ unsigned char rocksdb_mutable_cf_options_get_enable_blob_garbage_collection(
 }
 
 void rocksdb_mutable_cf_options_set_arena_block_size(
-    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+    rocksdb_mutable_cf_options_t* o, size_t v) {
   o->rep.arena_block_size = v;
 }
 
-uint64_t rocksdb_mutable_cf_options_get_arena_block_size(
+size_t rocksdb_mutable_cf_options_get_arena_block_size(
     const rocksdb_mutable_cf_options_t* o) {
   return o->rep.arena_block_size;
 }
 
 void rocksdb_mutable_cf_options_set_memtable_huge_page_size(
-    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+    rocksdb_mutable_cf_options_t* o, size_t v) {
   o->rep.memtable_huge_page_size = v;
 }
 
-uint64_t rocksdb_mutable_cf_options_get_memtable_huge_page_size(
+size_t rocksdb_mutable_cf_options_get_memtable_huge_page_size(
     const rocksdb_mutable_cf_options_t* o) {
   return o->rep.memtable_huge_page_size;
 }
 
 void rocksdb_mutable_cf_options_set_max_successive_merges(
-    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+    rocksdb_mutable_cf_options_t* o, size_t v) {
   o->rep.max_successive_merges = v;
 }
 
-uint64_t rocksdb_mutable_cf_options_get_max_successive_merges(
+size_t rocksdb_mutable_cf_options_get_max_successive_merges(
     const rocksdb_mutable_cf_options_t* o) {
   return o->rep.max_successive_merges;
 }
@@ -12141,11 +12141,11 @@ uint64_t rocksdb_mutable_cf_options_get_max_sequential_skip_in_iterations(
 }
 
 void rocksdb_mutable_cf_options_set_inplace_update_num_locks(
-    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+    rocksdb_mutable_cf_options_t* o, size_t v) {
   o->rep.inplace_update_num_locks = v;
 }
 
-uint64_t rocksdb_mutable_cf_options_get_inplace_update_num_locks(
+size_t rocksdb_mutable_cf_options_get_inplace_update_num_locks(
     const rocksdb_mutable_cf_options_t* o) {
   return o->rep.inplace_update_num_locks;
 }
@@ -12241,11 +12241,11 @@ double rocksdb_mutable_cf_options_get_experimental_mempurge_threshold(
 }
 
 void rocksdb_mutable_cf_options_set_min_tombstones_for_range_conversion(
-    rocksdb_mutable_cf_options_t* o, int v) {
+    rocksdb_mutable_cf_options_t* o, uint32_t v) {
   o->rep.min_tombstones_for_range_conversion = v;
 }
 
-int rocksdb_mutable_cf_options_get_min_tombstones_for_range_conversion(
+uint32_t rocksdb_mutable_cf_options_get_min_tombstones_for_range_conversion(
     const rocksdb_mutable_cf_options_t* o) {
   return o->rep.min_tombstones_for_range_conversion;
 }

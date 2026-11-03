@@ -7999,6 +7999,671 @@ extern ROCKSDB_LIBRARY_API const rocksdb_table_properties_t*
 rocksdb_externalfileingestioninfo_table_properties_view(
     const rocksdb_externalfileingestioninfo_t* info);
 
+/* Additive common API bridges. */
+typedef struct rocksdb_concurrent_task_limiter_t
+    rocksdb_concurrent_task_limiter_t;
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_max_write_buffer_number(
+    rocksdb_mutable_cf_options_t* o, int v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int
+rocksdb_mutable_cf_options_get_max_write_buffer_number(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_level0_slowdown_writes_trigger(
+    rocksdb_mutable_cf_options_t* o, int v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int
+rocksdb_mutable_cf_options_get_level0_slowdown_writes_trigger(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_level0_stop_writes_trigger(
+    rocksdb_mutable_cf_options_t* o, int v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int
+rocksdb_mutable_cf_options_get_level0_stop_writes_trigger(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_target_file_size_multiplier(
+    rocksdb_mutable_cf_options_t* o, int v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int
+rocksdb_mutable_cf_options_get_target_file_size_multiplier(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_blob_file_starting_level(
+    rocksdb_mutable_cf_options_t* o, int v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int
+rocksdb_mutable_cf_options_get_blob_file_starting_level(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_memtable_prefix_bloom_size_ratio(
+    rocksdb_mutable_cf_options_t* o, double v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API double
+rocksdb_mutable_cf_options_get_memtable_prefix_bloom_size_ratio(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_blob_garbage_collection_age_cutoff(
+    rocksdb_mutable_cf_options_t* o, double v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API double
+rocksdb_mutable_cf_options_get_blob_garbage_collection_age_cutoff(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_blob_garbage_collection_force_threshold(
+    rocksdb_mutable_cf_options_t* o, double v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API double
+rocksdb_mutable_cf_options_get_blob_garbage_collection_force_threshold(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_memtable_whole_key_filtering(
+    rocksdb_mutable_cf_options_t* o, unsigned char v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_mutable_cf_options_get_memtable_whole_key_filtering(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_report_bg_io_stats(
+    rocksdb_mutable_cf_options_t* o, unsigned char v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_mutable_cf_options_get_report_bg_io_stats(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_paranoid_file_checks(
+    rocksdb_mutable_cf_options_t* o, unsigned char v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_mutable_cf_options_get_paranoid_file_checks(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_enable_blob_files(
+    rocksdb_mutable_cf_options_t* o, unsigned char v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_mutable_cf_options_get_enable_blob_files(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_enable_blob_garbage_collection(
+    rocksdb_mutable_cf_options_t* o, unsigned char v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_mutable_cf_options_get_enable_blob_garbage_collection(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_mutable_cf_options_set_arena_block_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_arena_block_size(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_memtable_huge_page_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_memtable_huge_page_size(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_max_successive_merges(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_max_successive_merges(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_max_sequential_skip_in_iterations(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_max_sequential_skip_in_iterations(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_inplace_update_num_locks(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_inplace_update_num_locks(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_target_file_size_base(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_target_file_size_base(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_soft_pending_compaction_bytes_limit(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_soft_pending_compaction_bytes_limit(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_hard_pending_compaction_bytes_limit(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_hard_pending_compaction_bytes_limit(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_mutable_cf_options_set_ttl(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_ttl(const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_periodic_compaction_seconds(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_periodic_compaction_seconds(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_mutable_cf_options_set_min_blob_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_min_blob_size(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_mutable_cf_options_set_blob_file_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_blob_file_size(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_blob_compaction_readahead_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_cf_options_get_blob_compaction_readahead_size(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_experimental_mempurge_threshold(
+    rocksdb_mutable_cf_options_t* o, double v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API double
+rocksdb_mutable_cf_options_get_experimental_mempurge_threshold(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_min_tombstones_for_range_conversion(
+    rocksdb_mutable_cf_options_t* o, int v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int
+rocksdb_mutable_cf_options_get_min_tombstones_for_range_conversion(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_cf_options_set_read_triggered_compaction_threshold(
+    rocksdb_mutable_cf_options_t* o, double v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API double
+rocksdb_mutable_cf_options_get_read_triggered_compaction_threshold(
+    const rocksdb_mutable_cf_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_mutable_db_options_set_max_compaction_trigger_wakeup_seconds(
+    rocksdb_mutable_db_options_t* o, uint64_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_mutable_db_options_get_max_compaction_trigger_wakeup_seconds(
+    const rocksdb_mutable_db_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_compression_options_set_enabled(
+    rocksdb_compression_options_t* o, unsigned char v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_compression_options_get_enabled(const rocksdb_compression_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_compression_options_set_zstd_max_train_bytes(
+    rocksdb_compression_options_t* o, uint32_t v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint32_t
+rocksdb_compression_options_get_zstd_max_train_bytes(
+    const rocksdb_compression_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_hyper_clock_cache_options_set_strict_capacity_limit(
+    rocksdb_hyper_clock_cache_options_t* o, unsigned char v);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_hyper_clock_cache_options_get_strict_capacity_limit(
+    const rocksdb_hyper_clock_cache_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int64_t
+rocksdb_ratelimiter_get_single_burst_bytes(const rocksdb_ratelimiter_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int64_t
+rocksdb_ratelimiter_get_total_bytes_through(const rocksdb_ratelimiter_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int64_t
+rocksdb_ratelimiter_get_total_requests(const rocksdb_ratelimiter_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_sst_file_metadata_get_smallest_seqno(
+    const rocksdb_sst_file_metadata_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t rocksdb_sst_file_metadata_get_largest_seqno(
+    const rocksdb_sst_file_metadata_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_sst_file_metadata_get_num_reads_sampled(
+    const rocksdb_sst_file_metadata_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_sst_file_metadata_get_being_compacted(
+    const rocksdb_sst_file_metadata_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_sst_file_metadata_get_num_entries(const rocksdb_sst_file_metadata_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t rocksdb_sst_file_metadata_get_num_deletions(
+    const rocksdb_sst_file_metadata_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API const char*
+rocksdb_sst_file_metadata_get_file_checksum(
+    const rocksdb_sst_file_metadata_t* o, size_t* len);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_livefiles_num_reads_sampled(const rocksdb_livefiles_t* o, int index);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char rocksdb_livefiles_being_compacted(
+    const rocksdb_livefiles_t* o, int index);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API const char* rocksdb_livefiles_file_checksum(
+    const rocksdb_livefiles_t* o, int index, size_t* len);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_tableproperties_get_index_partitions(
+    const rocksdb_tableproperties_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_tableproperties_get_top_level_index_size(
+    const rocksdb_tableproperties_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_tableproperties_get_index_key_is_user_key(
+    const rocksdb_tableproperties_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API unsigned char
+rocksdb_tableproperties_get_index_value_is_delta_encoded(
+    const rocksdb_tableproperties_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Returns the number of user-collected properties (readable=0) or readable
+ * properties (readable!=0). Indexed key/value bytes are borrowed from this
+ * handle. */
+extern ROCKSDB_LIBRARY_API size_t rocksdb_tableproperties_property_count(
+    const rocksdb_tableproperties_t* o, unsigned char readable);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API const char* rocksdb_tableproperties_property_key(
+    const rocksdb_tableproperties_t* o, unsigned char readable, size_t index,
+    size_t* len);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API const char* rocksdb_tableproperties_property_value(
+    const rocksdb_tableproperties_t* o, unsigned char readable, size_t index,
+    size_t* len);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_abort_all_compactions(rocksdb_t* db);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_resume_all_compactions(rocksdb_t* db);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Returns a malloc-owned serialized snapshot; release with rocksdb_free. A null
+ * CF selects the default family. DB errors are written to errptr. */
+extern ROCKSDB_LIBRARY_API char* rocksdb_get_mutable_cf_options_string(
+    rocksdb_t* db, rocksdb_column_family_handle_t* cf, char** errptr);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Returns a malloc-owned serialized snapshot; release with rocksdb_free. DB
+ * errors are written to errptr. */
+extern ROCKSDB_LIBRARY_API char* rocksdb_get_mutable_db_options_string(
+    rocksdb_t* db, char** errptr);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Visits a copied file inventory. Paths are borrowed only during the callback.
+ * Do not throw across the C boundary. */
+extern ROCKSDB_LIBRARY_API void rocksdb_sst_file_manager_get_tracked_files(
+    rocksdb_sst_file_manager_t* o, void* state,
+    void (*callback)(void*, const char*, size_t, uint64_t));
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Copies all compression settings; the source remains caller-owned and can be
+ * destroyed after this call. */
+extern ROCKSDB_LIBRARY_API void rocksdb_options_set_compression_options_handle(
+    rocksdb_options_t* o, const rocksdb_compression_options_t* value);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Returns an owned copy; destroy it with rocksdb_compression_options_destroy.
+ * Mutating or destroying this copy does not change the attached settings. */
+extern ROCKSDB_LIBRARY_API rocksdb_compression_options_t*
+rocksdb_options_get_compression_options_handle(const rocksdb_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Copies all compression settings; the source remains caller-owned and can be
+ * destroyed after this call. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_options_set_bottommost_compression_options_handle(
+    rocksdb_options_t* o, const rocksdb_compression_options_t* value);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Returns an owned copy; destroy it with rocksdb_compression_options_destroy.
+ * Mutating or destroying this copy does not change the attached settings. */
+extern ROCKSDB_LIBRARY_API rocksdb_compression_options_t*
+rocksdb_options_get_bottommost_compression_options_handle(
+    const rocksdb_options_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API rocksdb_concurrent_task_limiter_t*
+rocksdb_concurrent_task_limiter_create(const char* name, int maximum);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_concurrent_task_limiter_destroy(
+    rocksdb_concurrent_task_limiter_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API const char* rocksdb_concurrent_task_limiter_name(
+    rocksdb_concurrent_task_limiter_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_concurrent_task_limiter_set_max_outstanding_task(
+    rocksdb_concurrent_task_limiter_t* o, int maximum);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_concurrent_task_limiter_reset_max_outstanding_task(
+    rocksdb_concurrent_task_limiter_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API int rocksdb_concurrent_task_limiter_outstanding_task(
+    rocksdb_concurrent_task_limiter_t* o);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+/* Shares the limiter with this options object and subsequently opened
+ * databases. Destroying the original C handle does not remove the attachment.
+ */
+extern ROCKSDB_LIBRARY_API void rocksdb_options_set_compaction_thread_limiter(
+    rocksdb_options_t* o, const rocksdb_concurrent_task_limiter_t* limiter);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_options_set_skip_list_rep(
+    rocksdb_options_t* o, size_t lookahead);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_options_set_vector_rep(
+    rocksdb_options_t* o, size_t count);
+
+/* Java 11.8.1 common bridge. Borrowed pointers are valid for the call/owner
+ * lifetime. */
+extern ROCKSDB_LIBRARY_API void rocksdb_options_set_hash_link_list_rep_full(
+    rocksdb_options_t* o, size_t buckets, size_t huge_page,
+    int logging_threshold, unsigned char log_distribution,
+    uint32_t skip_threshold);
+
+/* Full batch visitor: tags 0..12 are put, delete, single-delete, range-delete,
+ * merge, log-data, blob-index, begin-prepare, end-prepare, noop, rollback,
+ * commit, timestamped commit. Return 0 from callback to abort; should_continue
+ * returning 0 stops successfully. All pointers are borrowed during callbacks.
+ * No exception may cross this C boundary. */
+
+extern ROCKSDB_LIBRARY_API void rocksdb_writebatch_iterate_full(
+    rocksdb_writebatch_t* batch, void* state,
+    int (*callback)(void*, unsigned char, uint32_t, const char*, size_t,
+                    const char*, size_t, unsigned char),
+    unsigned char (*should_continue)(void*), char** errptr);
+
+typedef struct rocksdb_event_info_t rocksdb_event_info_t;
+
+/* Extended listener kinds 0..11: creation-started/created/deleted/CF-deletion,
+ * read/write/flush/sync/range-sync/truncate/close, recovery-completed.
+ * String fields 0..3: db-name, CF-name, path, encoded status.
+ * Number fields 0..7: job-id, creation-reason, size, offset, length,
+ * start-timestamp-nanos, duration-nanos, CF-id. Callback data is borrowed;
+ * copy it before returning. Call before attaching the listener to a DB. */
+
+extern ROCKSDB_LIBRARY_API void rocksdb_eventlistener_set_extended_callbacks(
+    rocksdb_eventlistener_t* listener,
+    void (*event)(void*, unsigned char, const rocksdb_event_info_t*),
+    unsigned char (*should_file_io)(void*),
+    unsigned char (*recovery_begin)(void*, unsigned int, const char*, size_t));
+
+extern ROCKSDB_LIBRARY_API const char* rocksdb_event_info_string(
+    const rocksdb_event_info_t* info, unsigned int field, size_t* len);
+
+extern ROCKSDB_LIBRARY_API uint64_t
+rocksdb_event_info_number(const rocksdb_event_info_t* info, unsigned int field);
+
+extern ROCKSDB_LIBRARY_API const rocksdb_tableproperties_t*
+rocksdb_event_info_table_properties(const rocksdb_event_info_t* info);
+
 #ifdef __cplusplus
 } /* end extern "C" */
 #endif

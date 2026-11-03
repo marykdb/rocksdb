@@ -1574,6 +1574,483 @@ static void TestTableRangeWrappers(void) {
   rocksdb_options_destroy(options);
 }
 
+/* Behavioral coverage for the additive Java-compatible common API bridge.
+ * Insert above main() in db/c_test.c and call TestCommonExpansion() after
+ * rocksdb_create_dir_if_missing(env, GetTempDir(), &err) succeeds in main(). */
+typedef struct CommonTrackedSnapshot {
+  size_t count;
+  uint64_t bytes;
+  char* copied_path;
+} CommonTrackedSnapshot;
+
+static void CommonTrackFile(void* opaque, const char* path, size_t length,
+                            uint64_t bytes) {
+  CommonTrackedSnapshot* state = (CommonTrackedSnapshot*)opaque;
+  char* copy = (char*)malloc(length + 1);
+  CheckCondition(copy != NULL);
+  memcpy(copy, path, length);
+  copy[length] = '\0';
+  free(state->copied_path);
+  state->copied_path = copy;
+  state->count++;
+  state->bytes += bytes;
+}
+
+typedef struct CommonBatchVisitor {
+  int calls;
+  int fail_tag;
+  int stop_after;
+  unsigned int seen;
+  uint32_t last_cf;
+  unsigned char last_flag;
+  char key[16];
+  size_t key_size;
+  char value[16];
+  size_t value_size;
+} CommonBatchVisitor;
+
+static int CommonVisitRecord(void* opaque, unsigned char tag, uint32_t cf,
+                             const char* key, size_t key_size,
+                             const char* value, size_t value_size,
+                             unsigned char flag) {
+  CommonBatchVisitor* state = (CommonBatchVisitor*)opaque;
+  CheckCondition(tag <= 12);
+  CheckCondition(key_size <= sizeof(state->key));
+  CheckCondition(value_size <= sizeof(state->value));
+  state->calls++;
+  state->seen |= 1u << tag;
+  state->last_cf = cf;
+  state->last_flag = flag;
+  state->key_size = key_size;
+  state->value_size = value_size;
+  if (key_size > 0) memcpy(state->key, key, key_size);
+  if (value_size > 0) memcpy(state->value, value, value_size);
+  return tag != state->fail_tag;
+}
+
+static unsigned char CommonVisitContinue(void* opaque) {
+  CommonBatchVisitor* state = (CommonBatchVisitor*)opaque;
+  return state->stop_after == 0 || state->calls < state->stop_after;
+}
+
+static void CommonResetVisitor(CommonBatchVisitor* state) {
+  memset(state, 0, sizeof(*state));
+  state->fail_tag = -1;
+}
+
+static void TestCommonBatchVisitor(void) {
+  char* err = NULL;
+  rocksdb_writebatch_t* batch = rocksdb_writebatch_create();
+  CommonBatchVisitor visitor;
+  unsigned char marker;
+  const char binary_key[] = {'k', '\0', 'x'};
+  const char binary_value[] = {'v', '\0', 'y'};
+  StartPhase("common_expansion_full_batch_visitor");
+  rocksdb_writebatch_put(batch, binary_key, sizeof(binary_key), binary_value,
+                         sizeof(binary_value), &err);
+  CheckNoError(err);
+  rocksdb_writebatch_delete(batch, "d", 1, &err);
+  CheckNoError(err);
+  rocksdb_writebatch_singledelete(batch, "s", 1, &err);
+  CheckNoError(err);
+  rocksdb_writebatch_delete_range(batch, "a", 1, "z", 1, &err);
+  CheckNoError(err);
+  rocksdb_writebatch_merge(batch, "m", 1, "v", 1, &err);
+  CheckNoError(err);
+  rocksdb_writebatch_put_log_data(batch, "log", 3, &err);
+  CheckNoError(err);
+  CommonResetVisitor(&visitor);
+  rocksdb_writebatch_iterate_full(batch, &visitor, CommonVisitRecord,
+                                  CommonVisitContinue, &err);
+  CheckNoError(err);
+  CheckCondition(visitor.calls == 6);
+  CheckCondition(visitor.seen == 0x3fu);
+  CheckCondition(visitor.key_size == 3 && memcmp(visitor.key, "log", 3) == 0);
+
+  CommonResetVisitor(&visitor);
+  visitor.stop_after = 1;
+  rocksdb_writebatch_iterate_full(batch, &visitor, CommonVisitRecord,
+                                  CommonVisitContinue, &err);
+  CheckNoError(err);
+  CheckCondition(visitor.calls == 1);
+  CheckCondition(visitor.key_size == sizeof(binary_key));
+  CheckCondition(memcmp(visitor.key, binary_key, sizeof(binary_key)) == 0);
+  CheckCondition(visitor.value_size == sizeof(binary_value));
+  CheckCondition(memcmp(visitor.value, binary_value, sizeof(binary_value)) ==
+                 0);
+
+  CommonResetVisitor(&visitor);
+  visitor.fail_tag =
+      5; /* LogData's void callback must propagate abort safely. */
+  rocksdb_writebatch_iterate_full(batch, &visitor, CommonVisitRecord,
+                                  CommonVisitContinue, &err);
+  CheckCondition(err != NULL);
+  rocksdb_free(err);
+  err = NULL;
+  CheckCondition(visitor.calls == 6);
+  rocksdb_writebatch_iterate_full(batch, NULL, NULL, NULL, &err);
+  CheckCondition(err != NULL);
+  rocksdb_free(err);
+  err = NULL;
+  rocksdb_writebatch_destroy(batch);
+
+  /* A CF blob index cannot be built through the legacy public C API. Encode
+   * the stable WriteBatch format: 12-byte header, CF-blob tag 0x10, cf=7,
+   * then length-prefixed binary key/value. The count is one data record. */
+  {
+    const char encoded[] = {0, 0,    0, 0, 0,   0, 0,   0, 1,   0, 0,
+                            0, 0x10, 7, 3, 'k', 0, 'x', 3, 'v', 0, 'y'};
+    batch = rocksdb_writebatch_create_from(encoded, sizeof(encoded));
+    CommonResetVisitor(&visitor);
+    rocksdb_writebatch_iterate_full(batch, &visitor, CommonVisitRecord,
+                                    CommonVisitContinue, &err);
+    CheckNoError(err);
+    CheckCondition(visitor.calls == 1 && visitor.seen == (1u << 6));
+    CheckCondition(visitor.last_cf == 7 && visitor.key_size == 3);
+    CheckCondition(memcmp(visitor.key, binary_key, 3) == 0);
+    CheckCondition(memcmp(visitor.value, binary_value, 3) == 0);
+    rocksdb_writebatch_destroy(batch);
+  }
+
+  /* Each transaction marker must also propagate a failed callback without
+   * violating WriteBatch::Iterate's internal Status::OK assertions. */
+  for (marker = 0; marker < 6; marker++) {
+    static const unsigned char raw_tags[] = {0x09, 0x0a, 0x0d,
+                                             0x0c, 0x0b, 0x15};
+    static const unsigned char callback_tags[] = {7, 8, 9, 10, 11, 12};
+    char encoded[32] = {0};
+    size_t length = 12;
+    encoded[length++] = (char)raw_tags[marker];
+    if (marker == 5) {
+      encoded[length++] = 2;
+      encoded[length++] = 't';
+      encoded[length++] = 's';
+    }
+    if (marker != 0 && marker != 2) {
+      encoded[length++] = 3;
+      encoded[length++] = 'x';
+      encoded[length++] = 0;
+      encoded[length++] = 'd';
+    }
+    batch = rocksdb_writebatch_create_from(encoded, length);
+    CommonResetVisitor(&visitor);
+    rocksdb_writebatch_iterate_full(batch, &visitor, CommonVisitRecord,
+                                    CommonVisitContinue, &err);
+    CheckNoError(err);
+    CheckCondition(visitor.calls == 1);
+    CheckCondition(visitor.seen == (1u << callback_tags[marker]));
+    if (marker == 2) CheckCondition(visitor.last_flag == 1);
+    if (marker == 5) {
+      CheckCondition(visitor.value_size == 2);
+      CheckCondition(memcmp(visitor.value, "ts", 2) == 0);
+    }
+    CommonResetVisitor(&visitor);
+    visitor.fail_tag = callback_tags[marker];
+    rocksdb_writebatch_iterate_full(batch, &visitor, CommonVisitRecord,
+                                    CommonVisitContinue, &err);
+    CheckCondition(err != NULL && visitor.calls == 1);
+    rocksdb_free(err);
+    err = NULL;
+    rocksdb_writebatch_destroy(batch);
+  }
+}
+
+static void TestCommonMemtables(void) {
+  int mode;
+  StartPhase("common_expansion_memtable_factories");
+  for (mode = 0; mode < 4; mode++) {
+    char path[260];
+    char* err = NULL;
+    rocksdb_options_t* options = rocksdb_options_create();
+    rocksdb_readoptions_t* ro = rocksdb_readoptions_create();
+    rocksdb_writeoptions_t* wo = rocksdb_writeoptions_create();
+    rocksdb_t* db;
+    snprintf(path, sizeof(path), "%s-common-memtable-%d", dbname, mode);
+    rocksdb_options_set_create_if_missing(options, 1);
+    rocksdb_options_set_allow_concurrent_memtable_write(options, 0);
+    if (mode == 0) rocksdb_options_set_skip_list_rep(options, 8);
+    if (mode == 1) rocksdb_options_set_vector_rep(options, 100);
+    if (mode >= 2) {
+      rocksdb_options_set_prefix_extractor(
+          options, rocksdb_slicetransform_create_fixed_prefix(1));
+    }
+    if (mode == 2) {
+      rocksdb_options_set_hash_link_list_rep_full(options, 100, 0, 100, 0, 256);
+    }
+    if (mode == 3) rocksdb_options_set_hash_skip_list_rep(options, 100, 4, 4);
+    rocksdb_destroy_db(options, path, &err);
+    CheckNoError(err);
+    db = rocksdb_open(options, path, &err);
+    CheckNoError(err);
+    rocksdb_put(db, wo, "ak", 2, "value", 5, &err);
+    CheckNoError(err);
+    CheckGet(db, ro, "ak", "value");
+    rocksdb_close(db);
+    rocksdb_destroy_db(options, path, &err);
+    CheckNoError(err);
+    rocksdb_writeoptions_destroy(wo);
+    rocksdb_readoptions_destroy(ro);
+    rocksdb_options_destroy(options);
+  }
+}
+
+static void TestCommonExpansion(void) {
+  char path[260];
+  char* err = NULL;
+  char* before_db;
+  char* before_cf;
+  char* after_db;
+  char* after_cf;
+  char* copied_checksum;
+  size_t checksum_len = 0;
+  rocksdb_options_t* options = rocksdb_options_create();
+  rocksdb_readoptions_t* ro = rocksdb_readoptions_create();
+  rocksdb_writeoptions_t* wo = rocksdb_writeoptions_create();
+  rocksdb_flushoptions_t* fo = rocksdb_flushoptions_create();
+  rocksdb_env_t* env = rocksdb_create_default_env();
+  rocksdb_sst_file_manager_t* manager = rocksdb_sst_file_manager_create(env);
+  rocksdb_ratelimiter_t* limiter =
+      rocksdb_ratelimiter_create_with_mode(100000000, 100000, 10, 2, 0);
+  rocksdb_concurrent_task_limiter_t* tasks =
+      rocksdb_concurrent_task_limiter_create("common-c-tests", 0);
+  rocksdb_hyper_clock_cache_options_t* cache_options =
+      rocksdb_hyper_clock_cache_options_create(8 * 1024 * 1024, 0);
+  rocksdb_cache_t* cache;
+  rocksdb_block_based_table_options_t* table_options;
+  rocksdb_sst_partitioner_factory_t* partitioner;
+  rocksdb_t* db;
+  CommonTrackedSnapshot tracked = {0, 0, NULL};
+  int i;
+  StartPhase("common_expansion_compression_owned_copies");
+  snprintf(path, sizeof(path), "%s-common-expansion", dbname);
+  {
+    rocksdb_options_t* holder = rocksdb_options_create();
+    rocksdb_compression_options_t* source =
+        rocksdb_compression_options_create();
+    rocksdb_compression_options_t* normal;
+    rocksdb_compression_options_t* bottom;
+    rocksdb_compression_options_set_level(source, 3);
+    rocksdb_compression_options_set_enabled(source, 1);
+    rocksdb_compression_options_set_max_dict_bytes(source, 4096);
+    rocksdb_compression_options_set_zstd_max_train_bytes(source, 2048);
+    rocksdb_options_set_compression_options_handle(holder, source);
+    rocksdb_options_set_bottommost_compression_options_handle(holder, source);
+    rocksdb_compression_options_set_level(source, 8);
+    rocksdb_compression_options_destroy(source);
+    normal = rocksdb_options_get_compression_options_handle(holder);
+    bottom = rocksdb_options_get_bottommost_compression_options_handle(holder);
+    CheckCondition(rocksdb_compression_options_get_level(normal) == 3);
+    CheckCondition(rocksdb_compression_options_get_enabled(normal) == 1);
+    CheckCondition(
+        rocksdb_compression_options_get_zstd_max_train_bytes(normal) == 2048);
+    CheckCondition(rocksdb_compression_options_get_max_dict_bytes(bottom) ==
+                   4096);
+    rocksdb_compression_options_set_level(normal, 6);
+    rocksdb_options_destroy(holder);
+    CheckCondition(rocksdb_compression_options_get_level(normal) == 6);
+    CheckCondition(rocksdb_compression_options_get_level(bottom) == 3);
+    rocksdb_compression_options_destroy(normal);
+    rocksdb_compression_options_destroy(bottom);
+  }
+
+  StartPhase("common_expansion_resources_and_live_readback");
+  CheckCondition(rocksdb_ratelimiter_get_single_burst_bytes(limiter) ==
+                 10000000);
+  CheckCondition(rocksdb_ratelimiter_get_total_bytes_through(limiter) == 0);
+  CheckCondition(rocksdb_ratelimiter_get_total_requests(limiter) == 0);
+  CheckCondition(strcmp(rocksdb_concurrent_task_limiter_name(tasks),
+                        "common-c-tests") == 0);
+  CheckCondition(rocksdb_concurrent_task_limiter_outstanding_task(tasks) == 0);
+  rocksdb_options_set_compaction_thread_limiter(options, tasks);
+  rocksdb_concurrent_task_limiter_set_max_outstanding_task(tasks, 1);
+  rocksdb_concurrent_task_limiter_reset_max_outstanding_task(tasks);
+  /* Options retains a shared owner after this wrapper is released. */
+  rocksdb_concurrent_task_limiter_destroy(tasks);
+  rocksdb_hyper_clock_cache_options_set_num_shard_bits(cache_options, 0);
+  rocksdb_hyper_clock_cache_options_set_strict_capacity_limit(cache_options, 1);
+  CheckCondition(rocksdb_hyper_clock_cache_options_get_strict_capacity_limit(
+                     cache_options) == 1);
+  rocksdb_hyper_clock_cache_options_set_strict_capacity_limit(cache_options, 0);
+  cache = rocksdb_cache_create_hyper_clock_opts(cache_options);
+  CheckCondition(cache != NULL);
+  rocksdb_hyper_clock_cache_options_destroy(cache_options);
+  table_options = rocksdb_block_based_options_create();
+  rocksdb_block_based_options_set_block_cache(table_options, cache);
+  rocksdb_options_set_block_based_table_factory(options, table_options);
+  rocksdb_block_based_options_destroy(table_options);
+  partitioner = rocksdb_sst_partitioner_fixed_prefix_factory_create(2);
+  rocksdb_options_set_sst_partitioner_factory(options, partitioner);
+  rocksdb_sst_partitioner_factory_destroy(partitioner);
+  rocksdb_options_set_sst_file_manager(options, manager);
+  rocksdb_options_set_ratelimiter(options, limiter);
+  rocksdb_options_set_create_if_missing(options, 1);
+  rocksdb_options_set_disable_auto_compactions(options, 1);
+  rocksdb_options_set_compression(options, 0);
+  rocksdb_options_set_max_open_files(options, 123);
+  rocksdb_options_set_write_buffer_size(options, 4194304);
+  rocksdb_flushoptions_set_wait(fo, 1);
+  rocksdb_destroy_db(options, path, &err);
+  CheckNoError(err);
+  db = rocksdb_open(options, path, &err);
+  CheckNoError(err);
+  before_db = rocksdb_get_mutable_db_options_string(db, &err);
+  CheckNoError(err);
+  before_cf = rocksdb_get_mutable_cf_options_string(db, NULL, &err);
+  CheckNoError(err);
+  CheckCondition(strstr(before_db, "max_open_files=123") != NULL);
+  CheckCondition(strstr(before_cf, "write_buffer_size=4194304") != NULL);
+  {
+    const char* db_keys[] = {"max_open_files"};
+    const char* db_values[] = {"87"};
+    const char* cf_keys[] = {"write_buffer_size"};
+    const char* cf_values[] = {"2097152"};
+    rocksdb_set_db_options(db, 1, db_keys, db_values, &err);
+    CheckNoError(err);
+    rocksdb_set_options(db, 1, cf_keys, cf_values, &err);
+    CheckNoError(err);
+  }
+  after_db = rocksdb_get_mutable_db_options_string(db, &err);
+  CheckNoError(err);
+  after_cf = rocksdb_get_mutable_cf_options_string(db, NULL, &err);
+  CheckNoError(err);
+  CheckCondition(strstr(after_db, "max_open_files=87") != NULL);
+  CheckCondition(strstr(after_cf, "write_buffer_size=2097152") != NULL);
+  CheckCondition(strstr(before_db, "max_open_files=123") != NULL);
+  CheckCondition(strstr(before_cf, "write_buffer_size=4194304") != NULL);
+  rocksdb_free(before_db);
+  rocksdb_free(before_cf);
+  rocksdb_free(after_db);
+  rocksdb_free(after_cf);
+  for (i = 0; i < 300; i++) {
+    char key[16];
+    char value[1024];
+    size_t key_size;
+    memset(value, (unsigned char)i, sizeof(value));
+    key_size = (size_t)snprintf(key, sizeof(key), "key%06d", i);
+    rocksdb_put(db, wo, key, key_size, value, sizeof(value), &err);
+    CheckNoError(err);
+  }
+  rocksdb_flush(db, fo, &err);
+  CheckNoError(err);
+  CheckCondition(rocksdb_ratelimiter_get_total_bytes_through(limiter) > 0);
+  CheckCondition(rocksdb_ratelimiter_get_total_requests(limiter) > 0);
+  rocksdb_sst_file_manager_get_tracked_files(manager, &tracked,
+                                             CommonTrackFile);
+  CheckCondition(tracked.count == 1 && tracked.bytes > 0);
+  CheckCondition(tracked.bytes ==
+                 rocksdb_sst_file_manager_get_total_size(manager));
+  {
+    const rocksdb_livefiles_t* live = rocksdb_livefiles(db);
+    rocksdb_column_family_metadata_t* cf =
+        rocksdb_get_column_family_metadata(db);
+    rocksdb_level_metadata_t* level =
+        rocksdb_column_family_metadata_get_level_metadata(cf, 0);
+    rocksdb_sst_file_metadata_t* file =
+        rocksdb_level_metadata_get_sst_file_metadata(level, 0);
+    const char* checksum;
+    const char* live_checksum;
+    size_t live_checksum_len;
+    CheckCondition(rocksdb_livefiles_count(live) == 1);
+    CheckCondition(rocksdb_sst_file_metadata_get_smallest_seqno(file) ==
+                   rocksdb_livefiles_smallest_seqno(live, 0));
+    CheckCondition(rocksdb_sst_file_metadata_get_largest_seqno(file) ==
+                   rocksdb_livefiles_largest_seqno(live, 0));
+    CheckCondition(rocksdb_sst_file_metadata_get_num_entries(file) ==
+                   rocksdb_livefiles_entries(live, 0));
+    CheckCondition(rocksdb_sst_file_metadata_get_num_entries(file) >= 300);
+    CheckCondition(rocksdb_sst_file_metadata_get_num_deletions(file) == 0);
+    CheckCondition(rocksdb_sst_file_metadata_get_num_reads_sampled(file) ==
+                   rocksdb_livefiles_num_reads_sampled(live, 0));
+    CheckCondition(rocksdb_sst_file_metadata_get_being_compacted(file) == 0);
+    CheckCondition(rocksdb_livefiles_being_compacted(live, 0) == 0);
+    checksum = rocksdb_sst_file_metadata_get_file_checksum(file, &checksum_len);
+    live_checksum =
+        rocksdb_livefiles_file_checksum(live, 0, &live_checksum_len);
+    CheckCondition(checksum_len == live_checksum_len);
+    CheckCondition(checksum_len == 0 ||
+                   memcmp(checksum, live_checksum, checksum_len) == 0);
+    copied_checksum = (char*)malloc(checksum_len + 1);
+    CheckCondition(copied_checksum != NULL);
+    memcpy(copied_checksum, checksum, checksum_len);
+    copied_checksum[checksum_len] = '\0';
+    rocksdb_sst_file_metadata_destroy(file);
+    rocksdb_level_metadata_destroy(level);
+    rocksdb_column_family_metadata_destroy(cf);
+    rocksdb_livefiles_destroy(live);
+  }
+  {
+    rocksdb_table_properties_collection_t* props =
+        rocksdb_get_properties_of_all_tables(db, &err);
+    const rocksdb_tableproperties_t* table;
+    unsigned char readable;
+    CheckNoError(err);
+    CheckCondition(rocksdb_table_properties_collection_count(props) == 1);
+    table = rocksdb_table_properties_collection_value_at(props, 0);
+    CheckCondition(rocksdb_tableproperties_num_entries(table) >= 300);
+    CheckCondition(rocksdb_tableproperties_get_index_partitions(table) == 0);
+    CheckCondition(rocksdb_tableproperties_get_top_level_index_size(table) ==
+                   0);
+    CheckCondition(rocksdb_tableproperties_get_index_key_is_user_key(table) <=
+                   1);
+    CheckCondition(
+        rocksdb_tableproperties_get_index_value_is_delta_encoded(table) <= 1);
+    for (readable = 0; readable <= 1; readable++) {
+      size_t count = rocksdb_tableproperties_property_count(table, readable);
+      size_t index;
+      size_t length = 999;
+      for (index = 0; index < count; index++) {
+        CheckCondition(rocksdb_tableproperties_property_key(
+                           table, readable, index, &length) != NULL);
+        CheckCondition(length > 0);
+        CheckCondition(rocksdb_tableproperties_property_value(
+                           table, readable, index, &length) != NULL);
+      }
+      CheckCondition(rocksdb_tableproperties_property_key(
+                         table, readable, count, &length) == NULL &&
+                     length == 0);
+      length = 999;
+      CheckCondition(rocksdb_tableproperties_property_value(
+                         table, readable, count, &length) == NULL &&
+                     length == 0);
+    }
+    rocksdb_table_properties_collection_destroy(props);
+  }
+  rocksdb_abort_all_compactions(db);
+  rocksdb_abort_all_compactions(db);
+  rocksdb_resume_all_compactions(db);
+  rocksdb_resume_all_compactions(db);
+  rocksdb_compact_range(db, NULL, 0, NULL, 0);
+  {
+    char* value;
+    size_t length;
+    value = rocksdb_get(db, ro, "key000000", 9, &length, &err);
+    CheckNoError(err);
+    CheckCondition(value != NULL && length == 1024);
+    rocksdb_free(value);
+    CheckCondition(rocksdb_cache_get_usage(cache) > 0);
+  }
+  rocksdb_close(db);
+  rocksdb_options_destroy(options);
+  rocksdb_sst_file_manager_destroy(manager);
+  rocksdb_env_destroy(env);
+  CheckCondition(tracked.copied_path != NULL &&
+                 strstr(tracked.copied_path, ".sst") != NULL);
+  CheckCondition(copied_checksum[checksum_len] == '\0');
+  free(tracked.copied_path);
+  free(copied_checksum);
+  rocksdb_ratelimiter_destroy(limiter);
+  rocksdb_cache_destroy(cache);
+  rocksdb_readoptions_destroy(ro);
+  rocksdb_writeoptions_destroy(wo);
+  rocksdb_flushoptions_destroy(fo);
+  options = rocksdb_options_create();
+  rocksdb_destroy_db(options, path, &err);
+  CheckNoError(err);
+  rocksdb_options_destroy(options);
+  TestCommonMemtables();
+  TestCommonBatchVisitor();
+}
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -1621,6 +2098,8 @@ int main(int argc, char** argv) {
 
   rocksdb_create_dir_if_missing(env, GetTempDir(), &err);
   CheckNoError(err);
+
+  TestCommonExpansion();
 
   cache = rocksdb_cache_create_lru(100000);
 

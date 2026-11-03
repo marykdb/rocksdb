@@ -25,6 +25,7 @@
 #include "rocksdb/advanced_cache.h"
 #include "rocksdb/compaction_filter.h"
 #include "rocksdb/comparator.h"
+#include "rocksdb/concurrent_task_limiter.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -264,6 +265,10 @@ static rocksdb_wal_file_t CaptureWalFile(const WalFile& wal_file) {
   result.size_file_bytes = wal_file.SizeFileBytes();
   return result;
 }
+
+struct rocksdb_concurrent_task_limiter_t {
+  std::shared_ptr<ROCKSDB_NAMESPACE::ConcurrentTaskLimiter> rep;
+};
 
 extern "C" {
 
@@ -4733,7 +4738,123 @@ rocksdb_externalfileingestioninfo_table_properties(
 
 /* event listener */
 
+struct rocksdb_event_info_t {
+  std::string strings[4];
+  uint64_t numbers[8]{};
+  rocksdb_tableproperties_t properties;
+};
+
+static std::string EventStatus(const Status& s) {
+  return "[" + std::to_string(static_cast<unsigned int>(s.code())) + "|" +
+         std::to_string(static_cast<unsigned int>(s.subcode())) + "] " +
+         s.ToString();
+}
+
 struct rocksdb_eventlistener_t : public EventListener {
+  void (*extended_event)(void*, unsigned char, const rocksdb_event_info_t*){};
+  unsigned char (*extended_should_file_io)(void*){};
+  unsigned char (*extended_recovery_begin)(void*, unsigned int, const char*,
+                                           size_t){};
+  void Emit(unsigned char kind, const rocksdb_event_info_t& info) {
+    if (extended_event) extended_event(state_, kind, &info);
+  }
+  static rocksdb_event_info_t Creation(
+      const ROCKSDB_NAMESPACE::TableFileCreationBriefInfo& info) {
+    rocksdb_event_info_t result;
+    result.strings[0] = info.db_name;
+    result.strings[1] = info.cf_name;
+    result.strings[2] = info.file_path;
+    result.numbers[0] = info.job_id;
+    result.numbers[1] = static_cast<unsigned int>(info.reason);
+    return result;
+  }
+  void OnTableFileCreationStarted(
+      const ROCKSDB_NAMESPACE::TableFileCreationBriefInfo& info) override {
+    Emit(0, Creation(info));
+  }
+  void OnTableFileCreated(
+      const ROCKSDB_NAMESPACE::TableFileCreationInfo& info) override {
+    auto result = Creation(info);
+    result.numbers[2] = info.file_size;
+    result.strings[3] = EventStatus(info.status);
+    result.properties.rep =
+        std::make_shared<TableProperties>(info.table_properties);
+    Emit(1, result);
+  }
+  void OnTableFileDeleted(
+      const ROCKSDB_NAMESPACE::TableFileDeletionInfo& info) override {
+    rocksdb_event_info_t result;
+    result.strings[0] = info.db_name;
+    result.strings[2] = info.file_path;
+    result.strings[3] = EventStatus(info.status);
+    result.numbers[0] = info.job_id;
+    Emit(2, result);
+  }
+  void OnColumnFamilyHandleDeletionStarted(
+      ColumnFamilyHandle* handle) override {
+    rocksdb_event_info_t result;
+    result.strings[1] = handle->GetName();
+    result.numbers[7] = handle->GetID();
+    Emit(3, result);
+  }
+  void File(unsigned char kind,
+            const ROCKSDB_NAMESPACE::FileOperationInfo& info) {
+    rocksdb_event_info_t result;
+    result.strings[2] = info.path;
+    result.strings[3] = EventStatus(info.status);
+    if (kind == 4 || kind == 5 || kind == 8) {
+      result.numbers[3] = info.offset;
+      result.numbers[4] = info.length;
+    }
+    result.numbers[5] = info.start_ts.time_since_epoch().count();
+    result.numbers[6] = info.duration.count();
+    Emit(kind, result);
+  }
+  void OnFileReadFinish(
+      const ROCKSDB_NAMESPACE::FileOperationInfo& info) override {
+    File(4, info);
+  }
+  void OnFileWriteFinish(
+      const ROCKSDB_NAMESPACE::FileOperationInfo& info) override {
+    File(5, info);
+  }
+  void OnFileFlushFinish(
+      const ROCKSDB_NAMESPACE::FileOperationInfo& info) override {
+    File(6, info);
+  }
+  void OnFileSyncFinish(
+      const ROCKSDB_NAMESPACE::FileOperationInfo& info) override {
+    File(7, info);
+  }
+  void OnFileRangeSyncFinish(
+      const ROCKSDB_NAMESPACE::FileOperationInfo& info) override {
+    File(8, info);
+  }
+  void OnFileTruncateFinish(
+      const ROCKSDB_NAMESPACE::FileOperationInfo& info) override {
+    File(9, info);
+  }
+  void OnFileCloseFinish(
+      const ROCKSDB_NAMESPACE::FileOperationInfo& info) override {
+    File(10, info);
+  }
+  bool ShouldBeNotifiedOnFileIO() override {
+    return extended_should_file_io && extended_should_file_io(state_);
+  }
+  void OnErrorRecoveryBegin(BackgroundErrorReason reason, Status error,
+                            bool* recovery) override {
+    auto message = EventStatus(error);
+    if (extended_recovery_begin)
+      *recovery =
+          extended_recovery_begin(state_, static_cast<unsigned int>(reason),
+                                  message.data(), message.size()) != 0;
+  }
+  void OnErrorRecoveryCompleted(Status error) override {
+    rocksdb_event_info_t result;
+    result.strings[3] = EventStatus(error);
+    Emit(11, result);
+  }
+
   void* state_{};
   void (*destructor_)(void*){};
   void (*on_flush_begin)(void*, rocksdb_t*, const rocksdb_flushjobinfo_t*){};
@@ -11847,6 +11968,675 @@ rocksdb_externalfileingestioninfo_table_properties_view(
     const rocksdb_externalfileingestioninfo_t* info) {
   return reinterpret_cast<const rocksdb_table_properties_t*>(
       &info->rep.table_properties);
+}
+
+void rocksdb_mutable_cf_options_set_max_write_buffer_number(
+    rocksdb_mutable_cf_options_t* o, int v) {
+  o->rep.max_write_buffer_number = v;
+}
+
+int rocksdb_mutable_cf_options_get_max_write_buffer_number(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.max_write_buffer_number;
+}
+
+void rocksdb_mutable_cf_options_set_level0_slowdown_writes_trigger(
+    rocksdb_mutable_cf_options_t* o, int v) {
+  o->rep.level0_slowdown_writes_trigger = v;
+}
+
+int rocksdb_mutable_cf_options_get_level0_slowdown_writes_trigger(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.level0_slowdown_writes_trigger;
+}
+
+void rocksdb_mutable_cf_options_set_level0_stop_writes_trigger(
+    rocksdb_mutable_cf_options_t* o, int v) {
+  o->rep.level0_stop_writes_trigger = v;
+}
+
+int rocksdb_mutable_cf_options_get_level0_stop_writes_trigger(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.level0_stop_writes_trigger;
+}
+
+void rocksdb_mutable_cf_options_set_target_file_size_multiplier(
+    rocksdb_mutable_cf_options_t* o, int v) {
+  o->rep.target_file_size_multiplier = v;
+}
+
+int rocksdb_mutable_cf_options_get_target_file_size_multiplier(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.target_file_size_multiplier;
+}
+
+void rocksdb_mutable_cf_options_set_blob_file_starting_level(
+    rocksdb_mutable_cf_options_t* o, int v) {
+  o->rep.blob_file_starting_level = v;
+}
+
+int rocksdb_mutable_cf_options_get_blob_file_starting_level(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.blob_file_starting_level;
+}
+
+void rocksdb_mutable_cf_options_set_memtable_prefix_bloom_size_ratio(
+    rocksdb_mutable_cf_options_t* o, double v) {
+  o->rep.memtable_prefix_bloom_size_ratio = v;
+}
+
+double rocksdb_mutable_cf_options_get_memtable_prefix_bloom_size_ratio(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.memtable_prefix_bloom_size_ratio;
+}
+
+void rocksdb_mutable_cf_options_set_blob_garbage_collection_age_cutoff(
+    rocksdb_mutable_cf_options_t* o, double v) {
+  o->rep.blob_garbage_collection_age_cutoff = v;
+}
+
+double rocksdb_mutable_cf_options_get_blob_garbage_collection_age_cutoff(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.blob_garbage_collection_age_cutoff;
+}
+
+void rocksdb_mutable_cf_options_set_blob_garbage_collection_force_threshold(
+    rocksdb_mutable_cf_options_t* o, double v) {
+  o->rep.blob_garbage_collection_force_threshold = v;
+}
+
+double rocksdb_mutable_cf_options_get_blob_garbage_collection_force_threshold(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.blob_garbage_collection_force_threshold;
+}
+
+void rocksdb_mutable_cf_options_set_memtable_whole_key_filtering(
+    rocksdb_mutable_cf_options_t* o, unsigned char v) {
+  o->rep.memtable_whole_key_filtering = v != 0;
+}
+
+unsigned char rocksdb_mutable_cf_options_get_memtable_whole_key_filtering(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.memtable_whole_key_filtering;
+}
+
+void rocksdb_mutable_cf_options_set_report_bg_io_stats(
+    rocksdb_mutable_cf_options_t* o, unsigned char v) {
+  o->rep.report_bg_io_stats = v != 0;
+}
+
+unsigned char rocksdb_mutable_cf_options_get_report_bg_io_stats(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.report_bg_io_stats;
+}
+
+void rocksdb_mutable_cf_options_set_paranoid_file_checks(
+    rocksdb_mutable_cf_options_t* o, unsigned char v) {
+  o->rep.paranoid_file_checks = v != 0;
+}
+
+unsigned char rocksdb_mutable_cf_options_get_paranoid_file_checks(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.paranoid_file_checks;
+}
+
+void rocksdb_mutable_cf_options_set_enable_blob_files(
+    rocksdb_mutable_cf_options_t* o, unsigned char v) {
+  o->rep.enable_blob_files = v != 0;
+}
+
+unsigned char rocksdb_mutable_cf_options_get_enable_blob_files(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.enable_blob_files;
+}
+
+void rocksdb_mutable_cf_options_set_enable_blob_garbage_collection(
+    rocksdb_mutable_cf_options_t* o, unsigned char v) {
+  o->rep.enable_blob_garbage_collection = v != 0;
+}
+
+unsigned char rocksdb_mutable_cf_options_get_enable_blob_garbage_collection(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.enable_blob_garbage_collection;
+}
+
+void rocksdb_mutable_cf_options_set_arena_block_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.arena_block_size = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_arena_block_size(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.arena_block_size;
+}
+
+void rocksdb_mutable_cf_options_set_memtable_huge_page_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.memtable_huge_page_size = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_memtable_huge_page_size(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.memtable_huge_page_size;
+}
+
+void rocksdb_mutable_cf_options_set_max_successive_merges(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.max_successive_merges = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_max_successive_merges(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.max_successive_merges;
+}
+
+void rocksdb_mutable_cf_options_set_max_sequential_skip_in_iterations(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.max_sequential_skip_in_iterations = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_max_sequential_skip_in_iterations(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.max_sequential_skip_in_iterations;
+}
+
+void rocksdb_mutable_cf_options_set_inplace_update_num_locks(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.inplace_update_num_locks = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_inplace_update_num_locks(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.inplace_update_num_locks;
+}
+
+void rocksdb_mutable_cf_options_set_target_file_size_base(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.target_file_size_base = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_target_file_size_base(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.target_file_size_base;
+}
+
+void rocksdb_mutable_cf_options_set_soft_pending_compaction_bytes_limit(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.soft_pending_compaction_bytes_limit = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_soft_pending_compaction_bytes_limit(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.soft_pending_compaction_bytes_limit;
+}
+
+void rocksdb_mutable_cf_options_set_hard_pending_compaction_bytes_limit(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.hard_pending_compaction_bytes_limit = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_hard_pending_compaction_bytes_limit(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.hard_pending_compaction_bytes_limit;
+}
+
+void rocksdb_mutable_cf_options_set_ttl(rocksdb_mutable_cf_options_t* o,
+                                        uint64_t v) {
+  o->rep.ttl = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_ttl(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.ttl;
+}
+
+void rocksdb_mutable_cf_options_set_periodic_compaction_seconds(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.periodic_compaction_seconds = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_periodic_compaction_seconds(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.periodic_compaction_seconds;
+}
+
+void rocksdb_mutable_cf_options_set_min_blob_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.min_blob_size = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_min_blob_size(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.min_blob_size;
+}
+
+void rocksdb_mutable_cf_options_set_blob_file_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.blob_file_size = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_blob_file_size(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.blob_file_size;
+}
+
+void rocksdb_mutable_cf_options_set_blob_compaction_readahead_size(
+    rocksdb_mutable_cf_options_t* o, uint64_t v) {
+  o->rep.blob_compaction_readahead_size = v;
+}
+
+uint64_t rocksdb_mutable_cf_options_get_blob_compaction_readahead_size(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.blob_compaction_readahead_size;
+}
+
+void rocksdb_mutable_cf_options_set_experimental_mempurge_threshold(
+    rocksdb_mutable_cf_options_t* o, double v) {
+  o->rep.experimental_mempurge_threshold = v;
+}
+
+double rocksdb_mutable_cf_options_get_experimental_mempurge_threshold(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.experimental_mempurge_threshold;
+}
+
+void rocksdb_mutable_cf_options_set_min_tombstones_for_range_conversion(
+    rocksdb_mutable_cf_options_t* o, int v) {
+  o->rep.min_tombstones_for_range_conversion = v;
+}
+
+int rocksdb_mutable_cf_options_get_min_tombstones_for_range_conversion(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.min_tombstones_for_range_conversion;
+}
+
+void rocksdb_mutable_cf_options_set_read_triggered_compaction_threshold(
+    rocksdb_mutable_cf_options_t* o, double v) {
+  o->rep.read_triggered_compaction_threshold = v;
+}
+
+double rocksdb_mutable_cf_options_get_read_triggered_compaction_threshold(
+    const rocksdb_mutable_cf_options_t* o) {
+  return o->rep.read_triggered_compaction_threshold;
+}
+
+void rocksdb_mutable_db_options_set_max_compaction_trigger_wakeup_seconds(
+    rocksdb_mutable_db_options_t* o, uint64_t v) {
+  o->rep.max_compaction_trigger_wakeup_seconds = v;
+}
+
+uint64_t rocksdb_mutable_db_options_get_max_compaction_trigger_wakeup_seconds(
+    const rocksdb_mutable_db_options_t* o) {
+  return o->rep.max_compaction_trigger_wakeup_seconds;
+}
+
+void rocksdb_compression_options_set_enabled(rocksdb_compression_options_t* o,
+                                             unsigned char v) {
+  o->rep.enabled = v != 0;
+}
+
+unsigned char rocksdb_compression_options_get_enabled(
+    const rocksdb_compression_options_t* o) {
+  return o->rep.enabled;
+}
+
+void rocksdb_compression_options_set_zstd_max_train_bytes(
+    rocksdb_compression_options_t* o, uint32_t v) {
+  o->rep.zstd_max_train_bytes = v;
+}
+
+uint32_t rocksdb_compression_options_get_zstd_max_train_bytes(
+    const rocksdb_compression_options_t* o) {
+  return o->rep.zstd_max_train_bytes;
+}
+
+void rocksdb_hyper_clock_cache_options_set_strict_capacity_limit(
+    rocksdb_hyper_clock_cache_options_t* o, unsigned char v) {
+  o->rep.strict_capacity_limit = v != 0;
+}
+
+unsigned char rocksdb_hyper_clock_cache_options_get_strict_capacity_limit(
+    const rocksdb_hyper_clock_cache_options_t* o) {
+  return o->rep.strict_capacity_limit;
+}
+
+int64_t rocksdb_ratelimiter_get_single_burst_bytes(
+    const rocksdb_ratelimiter_t* o) {
+  return o->rep->GetSingleBurstBytes();
+}
+
+int64_t rocksdb_ratelimiter_get_total_bytes_through(
+    const rocksdb_ratelimiter_t* o) {
+  return o->rep->GetTotalBytesThrough();
+}
+
+int64_t rocksdb_ratelimiter_get_total_requests(const rocksdb_ratelimiter_t* o) {
+  return o->rep->GetTotalRequests();
+}
+
+uint64_t rocksdb_sst_file_metadata_get_smallest_seqno(
+    const rocksdb_sst_file_metadata_t* o) {
+  return o->rep->smallest_seqno;
+}
+
+uint64_t rocksdb_sst_file_metadata_get_largest_seqno(
+    const rocksdb_sst_file_metadata_t* o) {
+  return o->rep->largest_seqno;
+}
+
+uint64_t rocksdb_sst_file_metadata_get_num_reads_sampled(
+    const rocksdb_sst_file_metadata_t* o) {
+  return o->rep->num_reads_sampled;
+}
+
+unsigned char rocksdb_sst_file_metadata_get_being_compacted(
+    const rocksdb_sst_file_metadata_t* o) {
+  return o->rep->being_compacted;
+}
+
+uint64_t rocksdb_sst_file_metadata_get_num_entries(
+    const rocksdb_sst_file_metadata_t* o) {
+  return o->rep->num_entries;
+}
+
+uint64_t rocksdb_sst_file_metadata_get_num_deletions(
+    const rocksdb_sst_file_metadata_t* o) {
+  return o->rep->num_deletions;
+}
+
+const char* rocksdb_sst_file_metadata_get_file_checksum(
+    const rocksdb_sst_file_metadata_t* o, size_t* len) {
+  *len = o->rep->file_checksum.size();
+  return o->rep->file_checksum.data();
+}
+
+uint64_t rocksdb_livefiles_num_reads_sampled(const rocksdb_livefiles_t* o,
+                                             int index) {
+  return o->rep[index].num_reads_sampled;
+}
+
+unsigned char rocksdb_livefiles_being_compacted(const rocksdb_livefiles_t* o,
+                                                int index) {
+  return o->rep[index].being_compacted;
+}
+
+const char* rocksdb_livefiles_file_checksum(const rocksdb_livefiles_t* o,
+                                            int index, size_t* len) {
+  *len = o->rep[index].file_checksum.size();
+  return o->rep[index].file_checksum.data();
+}
+
+uint64_t rocksdb_tableproperties_get_index_partitions(
+    const rocksdb_tableproperties_t* o) {
+  return o->rep->index_partitions;
+}
+
+uint64_t rocksdb_tableproperties_get_top_level_index_size(
+    const rocksdb_tableproperties_t* o) {
+  return o->rep->top_level_index_size;
+}
+
+unsigned char rocksdb_tableproperties_get_index_key_is_user_key(
+    const rocksdb_tableproperties_t* o) {
+  return o->rep->index_key_is_user_key;
+}
+
+unsigned char rocksdb_tableproperties_get_index_value_is_delta_encoded(
+    const rocksdb_tableproperties_t* o) {
+  return o->rep->index_value_is_delta_encoded;
+}
+
+size_t rocksdb_tableproperties_property_count(
+    const rocksdb_tableproperties_t* o, unsigned char readable) {
+  return readable ? o->rep->readable_properties.size()
+                  : o->rep->user_collected_properties.size();
+}
+
+const char* rocksdb_tableproperties_property_key(
+    const rocksdb_tableproperties_t* o, unsigned char readable, size_t index,
+    size_t* len) {
+  const auto& properties = readable ? o->rep->readable_properties
+                                    : o->rep->user_collected_properties;
+  if (index >= properties.size()) {
+    *len = 0;
+    return nullptr;
+  }
+  auto it = properties.begin();
+  std::advance(it, index);
+  *len = it->first.size();
+  return it->first.data();
+}
+
+const char* rocksdb_tableproperties_property_value(
+    const rocksdb_tableproperties_t* o, unsigned char readable, size_t index,
+    size_t* len) {
+  const auto& properties = readable ? o->rep->readable_properties
+                                    : o->rep->user_collected_properties;
+  if (index >= properties.size()) {
+    *len = 0;
+    return nullptr;
+  }
+  auto it = properties.begin();
+  std::advance(it, index);
+  *len = it->second.size();
+  return it->second.data();
+}
+
+char* rocksdb_get_mutable_cf_options_string(rocksdb_t* db,
+                                            rocksdb_column_family_handle_t* cf,
+                                            char** errptr) {
+  std::string value;
+  auto status = GetStringFromColumnFamilyOptions(
+      &value,
+      db->rep->GetOptions(cf ? cf->rep : db->rep->DefaultColumnFamily()));
+  if (SaveError(errptr, status)) return nullptr;
+  return strdup(value.c_str());
+}
+
+char* rocksdb_get_mutable_db_options_string(rocksdb_t* db, char** errptr) {
+  std::string value;
+  auto status = GetStringFromDBOptions(&value, db->rep->GetDBOptions());
+  if (SaveError(errptr, status)) return nullptr;
+  return strdup(value.c_str());
+}
+
+void rocksdb_sst_file_manager_get_tracked_files(
+    rocksdb_sst_file_manager_t* o, void* state,
+    void (*callback)(void*, const char*, size_t, uint64_t)) {
+  for (const auto& entry : o->rep->GetTrackedFiles())
+    callback(state, entry.first.data(), entry.first.size(), entry.second);
+}
+
+void rocksdb_options_set_compression_options_handle(
+    rocksdb_options_t* o, const rocksdb_compression_options_t* value) {
+  o->rep.compression_opts = value->rep;
+}
+
+rocksdb_compression_options_t* rocksdb_options_get_compression_options_handle(
+    const rocksdb_options_t* o) {
+  auto* value = new rocksdb_compression_options_t;
+  value->rep = o->rep.compression_opts;
+  return value;
+}
+
+void rocksdb_options_set_bottommost_compression_options_handle(
+    rocksdb_options_t* o, const rocksdb_compression_options_t* value) {
+  o->rep.bottommost_compression_opts = value->rep;
+}
+
+rocksdb_compression_options_t*
+rocksdb_options_get_bottommost_compression_options_handle(
+    const rocksdb_options_t* o) {
+  auto* value = new rocksdb_compression_options_t;
+  value->rep = o->rep.bottommost_compression_opts;
+  return value;
+}
+
+rocksdb_concurrent_task_limiter_t* rocksdb_concurrent_task_limiter_create(
+    const char* name, int maximum) {
+  auto* o = new rocksdb_concurrent_task_limiter_t;
+  o->rep.reset(ROCKSDB_NAMESPACE::NewConcurrentTaskLimiter(name, maximum));
+  return o;
+}
+
+void rocksdb_concurrent_task_limiter_destroy(
+    rocksdb_concurrent_task_limiter_t* o) {
+  delete o;
+}
+
+const char* rocksdb_concurrent_task_limiter_name(
+    rocksdb_concurrent_task_limiter_t* o) {
+  return o->rep->GetName().c_str();
+}
+
+void rocksdb_concurrent_task_limiter_set_max_outstanding_task(
+    rocksdb_concurrent_task_limiter_t* o, int maximum) {
+  o->rep->SetMaxOutstandingTask(maximum);
+}
+
+void rocksdb_concurrent_task_limiter_reset_max_outstanding_task(
+    rocksdb_concurrent_task_limiter_t* o) {
+  o->rep->ResetMaxOutstandingTask();
+}
+
+int rocksdb_concurrent_task_limiter_outstanding_task(
+    rocksdb_concurrent_task_limiter_t* o) {
+  return o->rep->GetOutstandingTask();
+}
+
+void rocksdb_options_set_compaction_thread_limiter(
+    rocksdb_options_t* o, const rocksdb_concurrent_task_limiter_t* limiter) {
+  o->rep.compaction_thread_limiter = limiter->rep;
+}
+
+void rocksdb_options_set_skip_list_rep(rocksdb_options_t* o, size_t lookahead) {
+  o->rep.memtable_factory.reset(
+      new ROCKSDB_NAMESPACE::SkipListFactory(lookahead));
+}
+
+void rocksdb_options_set_vector_rep(rocksdb_options_t* o, size_t count) {
+  o->rep.memtable_factory.reset(new ROCKSDB_NAMESPACE::VectorRepFactory(count));
+}
+
+void rocksdb_options_set_hash_link_list_rep_full(rocksdb_options_t* o,
+                                                 size_t buckets,
+                                                 size_t huge_page,
+                                                 int logging_threshold,
+                                                 unsigned char log_distribution,
+                                                 uint32_t skip_threshold) {
+  o->rep.memtable_factory.reset(ROCKSDB_NAMESPACE::NewHashLinkListRepFactory(
+      buckets, huge_page, logging_threshold, log_distribution != 0,
+      skip_threshold));
+}
+
+void rocksdb_writebatch_iterate_full(
+    rocksdb_writebatch_t* batch, void* state,
+    int (*callback)(void*, unsigned char, uint32_t, const char*, size_t,
+                    const char*, size_t, unsigned char),
+    unsigned char (*should_continue)(void*), char** errptr) {
+  struct Visitor : WriteBatch::Handler {
+    void* state;
+    decltype(callback) callback_fn;
+    decltype(should_continue) should_continue_fn;
+    bool aborted = false;
+    Visitor(void* s, decltype(callback) cb, decltype(should_continue) sc)
+        : state(s), callback_fn(cb), should_continue_fn(sc) {}
+    Status Emit(unsigned char tag, uint32_t cf = 0, const Slice& key = Slice(),
+                const Slice& value = Slice(), unsigned char flag = 0) {
+      if (!aborted && !callback_fn(state, tag, cf, key.data(), key.size(),
+                                   value.data(), value.size(), flag))
+        aborted = true;
+      return aborted ? Status::Aborted("WriteBatch callback aborted")
+                     : Status::OK();
+    }
+    Status PutCF(uint32_t cf, const Slice& k, const Slice& v) override {
+      return Emit(0, cf, k, v);
+    }
+    Status DeleteCF(uint32_t cf, const Slice& k) override {
+      return Emit(1, cf, k);
+    }
+    Status SingleDeleteCF(uint32_t cf, const Slice& k) override {
+      return Emit(2, cf, k);
+    }
+    Status DeleteRangeCF(uint32_t cf, const Slice& k, const Slice& v) override {
+      return Emit(3, cf, k, v);
+    }
+    Status MergeCF(uint32_t cf, const Slice& k, const Slice& v) override {
+      return Emit(4, cf, k, v);
+    }
+    void LogData(const Slice& v) override {
+      Emit(5, 0, v).PermitUncheckedError();
+    }
+    Status PutBlobIndexCF(uint32_t cf, const Slice& k,
+                          const Slice& v) override {
+      return Emit(6, cf, k, v);
+    }
+    Status MarkBeginPrepare(bool unprepared) override {
+      Emit(7, 0, Slice(), Slice(), unprepared).PermitUncheckedError();
+      return Status::OK();
+    }
+    Status MarkEndPrepare(const Slice& xid) override {
+      Emit(8, 0, xid).PermitUncheckedError();
+      return Status::OK();
+    }
+    Status MarkNoop(bool empty) override {
+      Emit(9, 0, Slice(), Slice(), empty).PermitUncheckedError();
+      return Status::OK();
+    }
+    Status MarkRollback(const Slice& xid) override {
+      Emit(10, 0, xid).PermitUncheckedError();
+      return Status::OK();
+    }
+    Status MarkCommit(const Slice& xid) override {
+      Emit(11, 0, xid).PermitUncheckedError();
+      return Status::OK();
+    }
+    Status MarkCommitWithTimestamp(const Slice& xid, const Slice& ts) override {
+      Emit(12, 0, xid, ts).PermitUncheckedError();
+      return Status::OK();
+    }
+    bool Continue() override {
+      return !aborted && (!should_continue_fn || should_continue_fn(state));
+    }
+  } visitor(state, callback, should_continue);
+  if (!callback) {
+    SaveError(errptr, Status::InvalidArgument("Missing batch callback"));
+    return;
+  }
+  auto status = batch->rep.Iterate(&visitor);
+  if (visitor.aborted && status.ok())
+    status = Status::Aborted("WriteBatch callback aborted");
+  SaveError(errptr, status);
+}
+
+void rocksdb_eventlistener_set_extended_callbacks(
+    rocksdb_eventlistener_t* listener,
+    void (*event)(void*, unsigned char, const rocksdb_event_info_t*),
+    unsigned char (*should_file_io)(void*),
+    unsigned char (*recovery_begin)(void*, unsigned int, const char*, size_t)) {
+  listener->extended_event = event;
+  listener->extended_should_file_io = should_file_io;
+  listener->extended_recovery_begin = recovery_begin;
+}
+
+const char* rocksdb_event_info_string(const rocksdb_event_info_t* info,
+                                      unsigned int field, size_t* len) {
+  if (field >= 4) {
+    *len = 0;
+    return nullptr;
+  }
+  *len = info->strings[field].size();
+  return info->strings[field].data();
+}
+
+uint64_t rocksdb_event_info_number(const rocksdb_event_info_t* info,
+                                   unsigned int field) {
+  return field < 8 ? info->numbers[field] : 0;
+}
+
+const rocksdb_tableproperties_t* rocksdb_event_info_table_properties(
+    const rocksdb_event_info_t* info) {
+  return info->properties.rep ? &info->properties : nullptr;
 }
 
 }  // end extern "C"

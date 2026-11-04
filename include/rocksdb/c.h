@@ -1417,6 +1417,18 @@ extern ROCKSDB_LIBRARY_API void rocksdb_block_based_options_set_filter_policy(
     rocksdb_filterpolicy_t* filter_policy);
 extern ROCKSDB_LIBRARY_API void rocksdb_block_based_options_set_block_cache(
     rocksdb_block_based_table_options_t* options, rocksdb_cache_t* block_cache);
+/* Attach a persistent cache to subsequently created block-based table
+ * factories. The options retain shared ownership, so the caller may destroy the
+ * cache handle after this call. A cache may be shared by multiple table
+ * options. Pass NULL to detach it; existing table factories and databases are
+ * unchanged. Do not modify the same table options concurrently. Example: set
+ * the cache, call rocksdb_options_set_block_based_table_factory(), then destroy
+ * the caller's cache and block-based table options handles.
+ */
+extern ROCKSDB_LIBRARY_API void
+rocksdb_block_based_options_set_persistent_cache(
+    rocksdb_block_based_table_options_t* options,
+    rocksdb_persistent_cache_t* persistent_cache);
 extern ROCKSDB_LIBRARY_API void
 rocksdb_block_based_options_set_user_defined_index_factory_from_string(
     rocksdb_block_based_table_options_t* options, const char* value,

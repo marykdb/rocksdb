@@ -8683,6 +8683,105 @@ int main(int argc, char** argv) {
     rocksdb_env_destroy(cache_env);
   }
 
+  StartPhase("persistent_cache_table_attachment");
+  {
+    rocksdb_env_t* cache_env = rocksdb_create_default_env();
+    rocksdb_persistent_cache_t* caches[2];
+    LoggerCallbackState cache_loggers[2] = {{0}, {0}};
+    rocksdb_block_based_table_options_t* tables[2];
+    rocksdb_options_t* db_options[3];
+    const uint64_t cache_size_bytes = 128ull * 1024 * 1024;
+    const uint64_t test_id = GetTestId();
+    char* cache_err = NULL;
+    char value[8192];
+    memset(value, 'p', sizeof(value) - 1);
+    value[sizeof(value) - 1] = '\0';
+    for (size_t i = 0; i < 2; ++i) {
+      char path[512];
+      int written = snprintf(path, sizeof(path),
+                             "%s/rocksdb_c_test-%" PRIu64 "-pcache-%zu",
+                             GetTempDir(), test_id, i);
+      CheckCondition(written > 0 && (size_t)written < sizeof(path));
+      rocksdb_create_dir_if_missing(cache_env, path, &cache_err);
+      CheckNoError(cache_err);
+      rocksdb_logger_t* logger =
+          rocksdb_logger_create(&cache_loggers[i], TestLoggerDestructor, NULL);
+      caches[i] = rocksdb_persistent_cache_create(
+          cache_env, path, cache_size_bytes, logger, 0, &cache_err);
+      rocksdb_logger_destroy(logger);
+      CheckNoError(cache_err);
+      CheckCondition(caches[i] != NULL);
+      tables[i] = rocksdb_block_based_options_create();
+      rocksdb_block_based_options_set_no_block_cache(tables[i], 1);
+      rocksdb_block_based_options_set_persistent_cache(tables[i], NULL);
+      rocksdb_block_based_options_set_persistent_cache(tables[i], caches[0]);
+    }
+    for (size_t i = 0; i < 3; ++i) {
+      db_options[i] = rocksdb_options_create();
+      rocksdb_options_set_create_if_missing(db_options[i], 1);
+      rocksdb_options_set_disable_auto_compactions(db_options[i], 1);
+      rocksdb_options_enable_statistics(db_options[i]);
+    }
+    // Snapshot the attached cache, then clear the source table options.
+    rocksdb_options_set_block_based_table_factory(db_options[0], tables[0]);
+    rocksdb_block_based_options_set_persistent_cache(tables[0], NULL);
+    rocksdb_options_set_block_based_table_factory(db_options[1], tables[0]);
+    // Replace a shared cache without invalidating the earlier factory snapshot.
+    rocksdb_block_based_options_set_persistent_cache(tables[1], caches[1]);
+    rocksdb_options_set_block_based_table_factory(db_options[2], tables[1]);
+    for (size_t i = 0; i < 2; ++i) {
+      rocksdb_block_based_options_destroy(tables[i]);
+      rocksdb_persistent_cache_destroy(caches[i]);
+      CheckCondition(cache_loggers[i].destructor_called == 0);
+    }
+    // Factories must retain the caches after all caller handles are destroyed.
+    for (size_t i = 0; i < 3; ++i) {
+      char path[512];
+      int written = snprintf(path, sizeof(path),
+                             "%s/rocksdb_c_test-%" PRIu64 "-pcache-db-%zu",
+                             GetTempDir(), test_id, i);
+      CheckCondition(written > 0 && (size_t)written < sizeof(path));
+      rocksdb_t* cache_db = rocksdb_open(db_options[i], path, &cache_err);
+      CheckNoError(cache_err);
+      rocksdb_writeoptions_t* write_options = rocksdb_writeoptions_create();
+      rocksdb_readoptions_t* read_options = rocksdb_readoptions_create();
+      rocksdb_flushoptions_t* flush_options = rocksdb_flushoptions_create();
+      rocksdb_flushoptions_set_wait(flush_options, 1);
+      rocksdb_put(cache_db, write_options, "key", 3, value, sizeof(value) - 1,
+                  &cache_err);
+      CheckNoError(cache_err);
+      rocksdb_flush(cache_db, flush_options, &cache_err);
+      CheckNoError(cache_err);
+      rocksdb_close(cache_db);
+      cache_db = rocksdb_open(db_options[i], path, &cache_err);
+      CheckNoError(cache_err);
+      CheckGet(cache_db, read_options, "key", value);
+      char* stats = rocksdb_options_statistics_get_string(db_options[i]);
+      CheckCondition(stats != NULL);
+      const char* prefix = "rocksdb.persistent.cache.miss COUNT : ";
+      const char* misses = strstr(stats, prefix);
+      CheckCondition(misses != NULL);
+      misses += strlen(prefix);
+      char* end = NULL;
+      unsigned long long count = strtoull(misses, &end, 10);
+      CheckCondition(end != misses);
+      CheckCondition(i == 1 ? count == 0 : count > 0);
+      rocksdb_free(stats);
+      rocksdb_readoptions_destroy(read_options);
+      rocksdb_writeoptions_destroy(write_options);
+      rocksdb_flushoptions_destroy(flush_options);
+      rocksdb_close(cache_db);
+      rocksdb_destroy_db(db_options[i], path, &cache_err);
+      CheckNoError(cache_err);
+      rocksdb_options_destroy(db_options[i]);
+      // Clearing and replacement must release the old references, rather than
+      // silently retaining the original cache in later factories.
+      CheckCondition(cache_loggers[0].destructor_called == 1);
+      CheckCondition(cache_loggers[1].destructor_called == (i == 2 ? 1 : 0));
+    }
+    rocksdb_env_destroy(cache_env);
+  }
+
   StartPhase("ttl_db_wrappers");
   {
     char ttl_path[200];

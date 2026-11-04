@@ -4710,6 +4710,13 @@ void rocksdb_block_based_options_set_block_cache(
   }
 }
 
+void rocksdb_block_based_options_set_persistent_cache(
+    rocksdb_block_based_table_options_t* options,
+    rocksdb_persistent_cache_t* persistent_cache) {
+  options->rep.persistent_cache =
+      persistent_cache != nullptr ? persistent_cache->rep : nullptr;
+}
+
 void rocksdb_block_based_options_set_user_defined_index_factory_from_string(
     rocksdb_block_based_table_options_t* options, const char* value,
     size_t value_len, char** errptr) {

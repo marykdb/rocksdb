@@ -8,12 +8,14 @@
 // The compiled file is db/c.cc
 //
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -395,6 +397,7 @@ struct rocksdb_save_point_t {
 struct rocksdb_t {
   DB* rep;
   bool owns_db = true;
+  bool is_ttl = false;
 };
 struct rocksdb_status_ptr_t {
   Status* rep;
@@ -416,8 +419,70 @@ struct rocksdb_create_backup_options_t {
 struct rocksdb_restore_options_t {
   RestoreOptions rep;
 };
+// TTL iterators expose plain decoded values but do not implement columns().
+// Indexed-batch iterators require that interface even for ordinary values.
+class CPlainValueIterator final : public Iterator {
+ public:
+  explicit CPlainValueIterator(Iterator* iterator) : iterator_(iterator) {}
+
+  bool Valid() const override { return iterator_->Valid(); }
+  void SeekToFirst() override { InvalidateColumns(); iterator_->SeekToFirst(); }
+  void SeekToLast() override { InvalidateColumns(); iterator_->SeekToLast(); }
+  void Seek(const Slice& key) override { InvalidateColumns(); iterator_->Seek(key); }
+  void SeekForPrev(const Slice& key) override { InvalidateColumns(); iterator_->SeekForPrev(key); }
+  void Next() override { InvalidateColumns(); iterator_->Next(); }
+  void Prev() override { InvalidateColumns(); iterator_->Prev(); }
+  Slice key() const override { return iterator_->key(); }
+  Slice value() const override { return iterator_->value(); }
+  Status status() const override { return iterator_->status(); }
+  bool PrepareValue() override {
+    InvalidateColumns();
+    return iterator_->PrepareValue();
+  }
+  Status Refresh() override {
+    InvalidateColumns();
+    return iterator_->Refresh();
+  }
+  Status Refresh(const Snapshot* snapshot) override {
+    InvalidateColumns();
+    return iterator_->Refresh(snapshot);
+  }
+  Status GetProperty(std::string name, std::string* value) override {
+    return iterator_->GetProperty(std::move(name), value);
+  }
+  void Prepare(const ROCKSDB_NAMESPACE::MultiScanArgs& args) override {
+    InvalidateColumns();
+    iterator_->Prepare(args);
+  }
+  const ROCKSDB_NAMESPACE::WideColumns& columns() const override {
+    assert(Valid());
+    if (!columns_ready_.load(std::memory_order_acquire)) {
+      std::lock_guard<std::mutex> lock(columns_mutex_);
+      if (!columns_ready_.load(std::memory_order_relaxed)) {
+        columns_[0].value() = iterator_->value();
+        columns_ready_.store(true, std::memory_order_release);
+      }
+    }
+    return columns_;
+  }
+
+ private:
+  void InvalidateColumns() { columns_ready_.store(false, std::memory_order_release); }
+
+  std::unique_ptr<Iterator> iterator_;
+  mutable ROCKSDB_NAMESPACE::WideColumns columns_{
+      {ROCKSDB_NAMESPACE::kDefaultWideColumnName, Slice()}};
+  mutable std::mutex columns_mutex_;
+  mutable std::atomic<bool> columns_ready_{false};
+};
+
+static Iterator* WrapCIterator(Iterator* iterator, bool is_ttl) {
+  return is_ttl ? new CPlainValueIterator(iterator) : iterator;
+}
+
 struct rocksdb_iterator_t {
   Iterator* rep;
+  std::shared_ptr<const Snapshot> snapshot_owner;
 };
 struct rocksdb_writebatch_t {
   WriteBatch* rep_;
@@ -571,7 +636,20 @@ struct rocksdb_readoptions_t {
 };
 
 struct rocksdb_writeoptions_t {
-  WriteOptions rep;
+  WriteOptions* rep_;
+  bool owns_rep;
+  WriteOptions& rep;
+
+  rocksdb_writeoptions_t() : rep_(new WriteOptions), owns_rep(true), rep(*rep_) {}
+
+  explicit rocksdb_writeoptions_t(WriteOptions* borrowed_rep)
+      : rep_(borrowed_rep), owns_rep(false), rep(*rep_) {}
+
+  ~rocksdb_writeoptions_t() {
+    if (owns_rep) {
+      delete rep_;
+    }
+  }
 };
 struct rocksdb_options_t {
   Options rep;
@@ -728,6 +806,13 @@ struct rocksdb_transactiondb_options_t {
 };
 struct rocksdb_transactiondb_t {
   TransactionDB* rep;
+  // C callers receive borrowed transaction wrappers. Own recovery-created
+  // objects here so resolving them cannot orphan them outside the name map.
+  std::vector<Transaction*> recovered_transactions;
+
+  explicit rocksdb_transactiondb_t(TransactionDB* db) : rep(db) {
+    rep->GetAllPreparedTransactions(&recovered_transactions);
+  }
 };
 struct rocksdb_transaction_options_t {
   TransactionOptions rep;
@@ -1199,8 +1284,14 @@ static rocksdb_optimistictransactiondb_t* WrapOptimisticTransactionDB(
 // Helper function to copy string data to a malloc'd buffer
 // Works with std::string, Slice, and PinnableSlice through implicit conversion
 static inline char* CopyString(const Slice& slice) {
-  char* result = reinterpret_cast<char*>(malloc(slice.size()));
-  memcpy(result, slice.data(), slice.size());
+  // A successful empty value must remain distinguishable from NotFound,
+  // which the C API represents by a null output pointer.
+  char* result = reinterpret_cast<char*>(malloc(slice.empty() ? 1 : slice.size()));
+  if (!slice.empty()) {
+    memcpy(result, slice.data(), slice.size());
+  } else {
+    result[0] = 0;
+  }
   return result;
 }
 
@@ -1807,6 +1898,7 @@ rocksdb_t* rocksdb_open_with_ttl(const rocksdb_options_t* options,
   rocksdb_t* result = new rocksdb_t;
   result->rep = db;
   result->owns_db = true;
+  result->is_ttl = true;
   return result;
 }
 
@@ -2235,6 +2327,7 @@ rocksdb_t* rocksdb_open_column_families_with_ttl(
   rocksdb_t* result = new rocksdb_t;
   result->rep = db;
   result->owns_db = true;
+  result->is_ttl = true;
   return result;
 }
 
@@ -2844,7 +2937,7 @@ unsigned char rocksdb_key_may_exist_cf(
 rocksdb_iterator_t* rocksdb_create_iterator(
     rocksdb_t* db, const rocksdb_readoptions_t* options) {
   rocksdb_iterator_t* result = new rocksdb_iterator_t;
-  result->rep = db->rep->NewIterator(options->rep);
+  result->rep = WrapCIterator(db->rep->NewIterator(options->rep), db->is_ttl);
   return result;
 }
 
@@ -2976,7 +3069,8 @@ rocksdb_iterator_t* rocksdb_create_iterator_cf(
     rocksdb_t* db, const rocksdb_readoptions_t* options,
     rocksdb_column_family_handle_t* column_family) {
   rocksdb_iterator_t* result = new rocksdb_iterator_t;
-  result->rep = db->rep->NewIterator(options->rep, column_family->rep);
+  result->rep = WrapCIterator(
+      db->rep->NewIterator(options->rep, column_family->rep), db->is_ttl);
   return result;
 }
 
@@ -2990,15 +3084,42 @@ void rocksdb_create_iterators(rocksdb_t* db, rocksdb_readoptions_t* opts,
   }
 
   std::vector<Iterator*> res;
-  Status status = db->rep->NewIterators(opts->rep, column_families_vec, &res);
-  assert(res.size() == size);
+  std::shared_ptr<const Snapshot> snapshot_owner;
+  Status status;
+  if (db->is_ttl && size != 0) {
+    // The TTL utility's inherited NewIterators returns raw values. Use its
+    // public TTL-aware NewIterator API with one shared, retained snapshot.
+    ReadOptions read_options(opts->rep);
+    if (read_options.snapshot == nullptr) {
+      const Snapshot* snapshot = db->rep->GetSnapshot();
+      if (snapshot == nullptr) {
+        SaveError(errptr, Status::NotSupported("TTL iterators require snapshots"));
+        return;
+      }
+      DB* owner = db->rep;
+      snapshot_owner = std::shared_ptr<const Snapshot>(
+          snapshot, [owner](const Snapshot* value) { owner->ReleaseSnapshot(value); });
+      read_options.snapshot = snapshot;
+    }
+    for (auto* family : column_families_vec) {
+      Iterator* iterator = db->rep->NewIterator(read_options, family);
+      status = iterator->status();
+      res.push_back(iterator);
+      if (!status.ok()) break;
+    }
+  } else {
+    status = db->rep->NewIterators(opts->rep, column_families_vec, &res);
+  }
   if (SaveError(errptr, status)) {
+    for (auto* iterator : res) delete iterator;
     return;
   }
+  assert(res.size() == size);
 
   for (size_t i = 0; i < size; i++) {
     iterators[i] = new rocksdb_iterator_t;
-    iterators[i]->rep = res[i];
+    iterators[i]->rep = WrapCIterator(res[i], db->is_ttl);
+    iterators[i]->snapshot_owner = snapshot_owner;
   }
 }
 
@@ -4187,6 +4308,7 @@ rocksdb_iterator_t* rocksdb_writebatch_wi_create_iterator_with_base(
     rocksdb_writebatch_wi_t* wbwi, rocksdb_iterator_t* base_iterator) {
   rocksdb_iterator_t* result = new rocksdb_iterator_t;
   result->rep = wbwi->rep->NewIteratorWithBase(base_iterator->rep);
+  result->snapshot_owner = std::move(base_iterator->snapshot_owner);
   delete base_iterator;
   return result;
 }
@@ -4197,6 +4319,7 @@ rocksdb_iterator_t* rocksdb_writebatch_wi_create_iterator_with_base_readopts(
   rocksdb_iterator_t* result = new rocksdb_iterator_t;
   result->rep =
       wbwi->rep->NewIteratorWithBase(base_iterator->rep, &options->rep);
+  result->snapshot_owner = std::move(base_iterator->snapshot_owner);
   delete base_iterator;
   return result;
 }
@@ -4207,6 +4330,7 @@ rocksdb_iterator_t* rocksdb_writebatch_wi_create_iterator_with_base_cf(
   rocksdb_iterator_t* result = new rocksdb_iterator_t;
   result->rep =
       wbwi->rep->NewIteratorWithBase(column_family->rep, base_iterator->rep);
+  result->snapshot_owner = std::move(base_iterator->snapshot_owner);
   delete base_iterator;
   return result;
 }
@@ -4218,6 +4342,7 @@ rocksdb_iterator_t* rocksdb_writebatch_wi_create_iterator_with_base_cf_readopts(
   rocksdb_iterator_t* result = new rocksdb_iterator_t;
   result->rep = wbwi->rep->NewIteratorWithBase(
       column_family->rep, base_iterator->rep, &options->rep);
+  result->snapshot_owner = std::move(base_iterator->snapshot_owner);
   delete base_iterator;
   return result;
 }
@@ -8014,8 +8139,7 @@ rocksdb_transactiondb_t* rocksdb_transactiondb_open(
                                             std::string(name), &txn_db))) {
     return nullptr;
   }
-  rocksdb_transactiondb_t* result = new rocksdb_transactiondb_t;
-  result->rep = txn_db;
+  rocksdb_transactiondb_t* result = new rocksdb_transactiondb_t(txn_db);
   return result;
 }
 
@@ -8047,8 +8171,7 @@ rocksdb_transactiondb_t* rocksdb_transactiondb_open_column_families(
     c_handle->immortal = false;
     column_family_handles[i] = c_handle;
   }
-  rocksdb_transactiondb_t* result = new rocksdb_transactiondb_t;
-  result->rep = txn_db;
+  rocksdb_transactiondb_t* result = new rocksdb_transactiondb_t(txn_db);
   return result;
 }
 
@@ -8084,6 +8207,16 @@ int rocksdb_transactiondb_property_int(rocksdb_transactiondb_t* db,
   } else {
     return -1;
   }
+}
+
+rocksdb_t* rocksdb_transactiondb_get_db(rocksdb_transactiondb_t* txn_db) {
+  if (txn_db == nullptr || txn_db->rep == nullptr) {
+    return nullptr;
+  }
+  auto* result = new rocksdb_t;
+  result->rep = txn_db->rep;
+  result->owns_db = false;
+  return result;
 }
 
 rocksdb_t* rocksdb_transactiondb_get_base_db(rocksdb_transactiondb_t* txn_db) {
@@ -8654,6 +8787,9 @@ rocksdb_iterator_t* rocksdb_transactiondb_create_iterator_cf(
 }
 
 void rocksdb_transactiondb_close(rocksdb_transactiondb_t* txn_db) {
+  for (auto* transaction : txn_db->recovered_transactions) {
+    delete transaction;
+  }
   delete txn_db->rep;
   delete txn_db;
 }
@@ -8792,6 +8928,17 @@ rocksdb_optimistictransactiondb_open_column_families_with_otxn_db_options(
     column_family_handles[i] = c_handle;
   }
   return WrapOptimisticTransactionDB(otxn_db);
+}
+
+rocksdb_t* rocksdb_optimistictransactiondb_get_db(
+    rocksdb_optimistictransactiondb_t* otxn_db) {
+  if (otxn_db == nullptr || otxn_db->rep == nullptr) {
+    return nullptr;
+  }
+  auto* result = new rocksdb_t;
+  result->rep = otxn_db->rep;
+  result->owns_db = false;
+  return result;
 }
 
 rocksdb_t* rocksdb_optimistictransactiondb_get_base_db(
@@ -9558,6 +9705,17 @@ rocksdb_column_family_handle_t* rocksdb_ttl_create_column_family(
   return handle;
 }
 
+rocksdb_t* rocksdb_ttl_get_db(rocksdb_ttl_t* db) {
+  if (db == nullptr || db->rep == nullptr) {
+    return nullptr;
+  }
+  auto* result = new rocksdb_t;
+  result->rep = db->rep;
+  result->owns_db = false;
+  result->is_ttl = true;
+  return result;
+}
+
 rocksdb_t* rocksdb_ttl_get_base_db(rocksdb_ttl_t* db) {
   if (db == nullptr) {
     return nullptr;
@@ -10122,6 +10280,11 @@ void rocksdb_env_lower_with_priority_thread_pool_cpu_priority(
 
 int32_t rocksdb_env_get_thread_pool_queue_length(rocksdb_env_t* env) {
   return env->rep->GetThreadPoolQueueLen();
+}
+
+int32_t rocksdb_env_get_thread_pool_queue_length_with_priority(
+    rocksdb_env_t* env, int priority) {
+  return env->rep->GetThreadPoolQueueLen(static_cast<Env::Priority>(priority));
 }
 
 void rocksdb_env_inc_background_threads_if_needed(rocksdb_env_t* env, int num,
@@ -11069,8 +11232,7 @@ rocksdb_transactiondb_open_column_families_with_lengths(
                                             &handles, &txn_db)))
     return nullptr;
   SetColumnFamilyHandles(handles, column_family_handles);
-  auto* result = new rocksdb_transactiondb_t;
-  result->rep = txn_db;
+  auto* result = new rocksdb_transactiondb_t(txn_db);
   return result;
 }
 
@@ -11087,6 +11249,15 @@ rocksdb_transaction_t* rocksdb_transactiondb_get_transaction_by_name(
   return result;
 }
 
+rocksdb_writeoptions_t* rocksdb_transaction_get_write_options_view(
+    rocksdb_transaction_t* txn) {
+  if (txn == nullptr || txn->rep == nullptr) {
+    return nullptr;
+  }
+  return new rocksdb_writeoptions_t(
+      const_cast<WriteOptions*>(txn->rep->GetWriteOptions()));
+}
+
 rocksdb_writeoptions_t* rocksdb_transaction_get_write_options(
     rocksdb_transaction_t* txn) {
   if (txn == nullptr || txn->rep == nullptr) {
@@ -11100,6 +11271,14 @@ rocksdb_writeoptions_t* rocksdb_transaction_get_write_options(
 void rocksdb_transaction_set_write_options(rocksdb_transaction_t* txn,
                                            rocksdb_writeoptions_t* options) {
   txn->rep->SetWriteOptions(options->rep);
+}
+
+rocksdb_writebatch_t* rocksdb_transaction_get_commit_time_writebatch_view(
+    rocksdb_transaction_t* txn) {
+  if (txn == nullptr || txn->rep == nullptr) {
+    return nullptr;
+  }
+  return new rocksdb_writebatch_t(txn->rep->GetCommitTimeWriteBatch());
 }
 
 rocksdb_writebatch_t* rocksdb_transaction_get_commit_time_writebatch(
@@ -11535,15 +11714,15 @@ ROCKSDB_LIBRARY_API uint64_t* rocksdb_transaction_get_waiting_txns(
     *num_txns = 0;
   }
 
-  std::string key_filter;
-  std::string* key_ptr = nullptr;
-  if (key != nullptr && key_len > 0) {
-    key_filter.assign(key, key_len);
-    key_ptr = &key_filter;
-  }
+  std::string waiting_key;
 
   std::vector<uint64_t> txns;
-  txns = txn->rep->GetWaitingTxns(column_family_id, key_ptr);
+  txns = txn->rep->GetWaitingTxns(column_family_id, &waiting_key);
+  if (key != nullptr && key_len > 0) {
+    const size_t copied = std::min(waiting_key.size(), key_len - 1);
+    memcpy(key, waiting_key.data(), copied);
+    key[copied] = 0;
+  }
 
   size_t count = txns.size();
   if (num_txns) {
@@ -11557,6 +11736,29 @@ ROCKSDB_LIBRARY_API uint64_t* rocksdb_transaction_get_waiting_txns(
   for (size_t i = 0; i < count; ++i) {
     result[i] = txns[i];
   }
+  return result;
+}
+
+uint64_t* rocksdb_transaction_get_waiting_txns_with_key(
+    rocksdb_transaction_t* txn, uint32_t* column_family_id, char** key,
+    size_t* key_len, size_t* num_txns) {
+  if (column_family_id) *column_family_id = 0;
+  if (key) *key = nullptr;
+  if (key_len) *key_len = 0;
+  if (num_txns) *num_txns = 0;
+  if (txn == nullptr || txn->rep == nullptr) {
+    return nullptr;
+  }
+  std::string waiting_key;
+  const auto txns = txn->rep->GetWaitingTxns(column_family_id, &waiting_key);
+  if (key) *key = CopyString(waiting_key);
+  if (key_len) *key_len = waiting_key.size();
+  if (num_txns) *num_txns = txns.size();
+  if (txns.empty()) {
+    return nullptr;
+  }
+  auto* result = new uint64_t[txns.size()];
+  std::copy(txns.begin(), txns.end(), result);
   return result;
 }
 

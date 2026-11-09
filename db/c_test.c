@@ -2085,6 +2085,275 @@ static void TestCommonExpansion(void) {
   TestCommonBatchVisitor();
 }
 
+static void TestTransactionDbDispatch(void) {
+  StartPhase("transaction_db_virtual_dispatch");
+  char path[240];
+  snprintf(path, sizeof(path), "%s-dispatch", dbname);
+  char* err = NULL;
+  rocksdb_options_t* options = rocksdb_options_create();
+  rocksdb_options_set_create_if_missing(options, 1);
+  rocksdb_options_set_allow_2pc(options, 1);
+  rocksdb_readoptions_t* ro = rocksdb_readoptions_create();
+  rocksdb_writeoptions_t* wo = rocksdb_writeoptions_create();
+  rocksdb_transaction_options_t* txo = rocksdb_transaction_options_create();
+  rocksdb_transactiondb_options_t* dbo = rocksdb_transactiondb_options_create();
+  rocksdb_transactiondb_options_set_default_lock_timeout(dbo, 0);
+  CheckCondition(rocksdb_transactiondb_get_db(NULL) == NULL);
+  CheckCondition(rocksdb_optimistictransactiondb_get_db(NULL) == NULL);
+  for (int policy = 0; policy != 3; ++policy) {
+    rocksdb_destroy_db(options, path, &err);
+    CheckNoError(err);
+    rocksdb_transactiondb_options_set_write_policy(dbo, policy);
+    rocksdb_transactiondb_t* db = rocksdb_transactiondb_open(options, dbo, path, &err);
+    CheckNoError(err);
+    rocksdb_t* view = rocksdb_transactiondb_get_db(db);
+    rocksdb_column_family_handle_t* families[2] = {
+      rocksdb_get_default_column_family_handle(view),
+      rocksdb_create_column_family(view, options, "other", &err)
+    };
+    CheckNoError(err);
+    for (int family = 0; family != 2; ++family) {
+      rocksdb_column_family_handle_t* cf = families[family];
+      rocksdb_put_cf(view, wo, cf, "k", 1, "v", 1, &err);
+      CheckNoError(err);
+      rocksdb_transaction_t* tx = rocksdb_transaction_begin(db, wo, txo, NULL);
+      size_t size;
+      char* value = rocksdb_transaction_get_for_update_cf(tx, ro, cf, "k", 1, &size, 1, &err);
+      CheckNoError(err);
+      CheckEqual("v", value, size);
+      Free(&value);
+      rocksdb_singledelete_cf(view, wo, cf, "k", 1, &err);
+      CheckCondition(err != NULL && strstr(err, "Operation timed out") != NULL);
+      Free(&err);
+      rocksdb_writebatch_t* batch = rocksdb_writebatch_create();
+      rocksdb_writebatch_put_cf(batch, cf, "added", 5, "v", 1, &err);
+      CheckNoError(err);
+      rocksdb_writebatch_delete_cf(batch, cf, "k", 1, &err);
+      CheckNoError(err);
+      rocksdb_write(view, wo, batch, &err);
+      CheckCondition(err != NULL && strstr(err, "Operation timed out") != NULL);
+      Free(&err);
+      CheckGetCF(view, ro, cf, "k", "v");
+      CheckGetCF(view, ro, cf, "added", NULL);
+      rocksdb_transaction_rollback(tx, &err);
+      CheckNoError(err);
+      rocksdb_transaction_destroy(tx);
+      rocksdb_write(view, wo, batch, &err);
+      CheckNoError(err);
+      CheckGetCF(view, ro, cf, "k", NULL);
+      CheckGetCF(view, ro, cf, "added", "v");
+      rocksdb_writebatch_destroy(batch);
+      rocksdb_delete_range_cf(view, wo, cf, "a", 1, "z", 1, &err);
+      CheckCondition(err != NULL && strstr(err, "Not implemented") != NULL);
+      Free(&err);
+      if (policy != 0) {
+        tx = rocksdb_transaction_begin(db, wo, txo, NULL);
+        rocksdb_transaction_set_name(tx, "prepared", 8, &err);
+        CheckNoError(err);
+        rocksdb_transaction_put_cf(tx, cf, "hidden", 6, "pending", 7, &err);
+        CheckNoError(err);
+        rocksdb_transaction_prepare(tx, &err);
+        CheckNoError(err);
+        CheckGetCF(view, ro, cf, "hidden", NULL);
+        CheckPinGetCF(view, ro, cf, "hidden", NULL);
+        rocksdb_iterator_t* iter = rocksdb_create_iterator_cf(view, ro, cf);
+        rocksdb_iter_seek(iter, "hidden", 6);
+        CheckCondition(!rocksdb_iter_valid(iter));
+        rocksdb_iter_get_error(iter, &err);
+        CheckNoError(err);
+        rocksdb_iter_destroy(iter);
+        rocksdb_transaction_commit(tx, &err);
+        CheckNoError(err);
+        rocksdb_transaction_destroy(tx);
+        CheckGetCF(view, ro, cf, "hidden", "pending");
+      }
+    }
+    rocksdb_column_family_handle_destroy(families[1]);
+    rocksdb_column_family_handle_destroy(families[0]);
+    rocksdb_close(view);
+    /* Closing the view must not close its owner. */
+    rocksdb_transactiondb_put(db, wo, "alive", 5, "yes", 3, &err);
+    CheckNoError(err);
+    rocksdb_transactiondb_close(db);
+  }
+  rocksdb_destroy_db(options, path, &err);
+  CheckNoError(err);
+  rocksdb_optimistictransactiondb_t* optimistic = rocksdb_optimistictransactiondb_open(options, path, &err);
+  CheckNoError(err);
+  rocksdb_t* view = rocksdb_optimistictransactiondb_get_db(optimistic);
+  rocksdb_column_family_handle_t* cf = rocksdb_get_default_column_family_handle(view);
+  rocksdb_put(view, wo, "key", 3, "value", 5, &err);
+  CheckNoError(err);
+  rocksdb_delete_range_cf(view, wo, cf, "a", 1, "z", 1, &err);
+  CheckCondition(err != NULL && strstr(err, "Not implemented") != NULL);
+  Free(&err);
+  rocksdb_writebatch_t* batch = rocksdb_writebatch_create();
+  rocksdb_writebatch_delete_range(batch, "a", 1, "z", 1, &err);
+  CheckNoError(err);
+  rocksdb_write(view, wo, batch, &err);
+  CheckCondition(err != NULL && strstr(err, "Not implemented") != NULL);
+  Free(&err);
+  CheckGet(view, ro, "key", "value");
+  rocksdb_t* base = rocksdb_optimistictransactiondb_get_base_db(optimistic);
+  rocksdb_delete_range_cf(base, wo, cf, "a", 1, "z", 1, &err);
+  CheckNoError(err);
+  CheckGet(base, ro, "key", NULL);
+  rocksdb_close(base);
+  rocksdb_writebatch_destroy(batch);
+  rocksdb_column_family_handle_destroy(cf);
+  rocksdb_close(view);
+  rocksdb_optimistictransactiondb_close(optimistic);
+  rocksdb_destroy_db(options, path, &err);
+  CheckNoError(err);
+  rocksdb_transactiondb_options_destroy(dbo);
+  rocksdb_transaction_options_destroy(txo);
+  rocksdb_writeoptions_destroy(wo);
+  rocksdb_readoptions_destroy(ro);
+  rocksdb_options_destroy(options);
+}
+
+static void TestAdditionalNativeViews(void) {
+  StartPhase("additional_native_views");
+  char path[240];
+  snprintf(path, sizeof(path), "%s-additional-views", dbname);
+  char* err = NULL;
+  rocksdb_options_t* options = rocksdb_options_create();
+  rocksdb_options_set_create_if_missing(options, 1);
+  rocksdb_readoptions_t* ro = rocksdb_readoptions_create();
+  rocksdb_writeoptions_t* wo = rocksdb_writeoptions_create();
+  rocksdb_destroy_db(options, path, &err);
+  CheckNoError(err);
+  rocksdb_ttl_t* ttl = rocksdb_ttl_open(options, path, 0, 0, &err);
+  CheckNoError(err);
+  rocksdb_t* view = rocksdb_ttl_get_db(ttl);
+  CheckCondition(view != NULL);
+  rocksdb_put(view, wo, "key", 3, "value", 5, &err);
+  CheckNoError(err);
+  CheckGet(view, ro, "key", "value");
+  rocksdb_column_family_handle_t* cf = rocksdb_get_default_column_family_handle(view);
+  rocksdb_column_family_handle_t* iterator_families[2] = {cf, cf};
+  rocksdb_iterator_t* iterators[2] = {NULL, NULL};
+  rocksdb_create_iterators(view, ro, iterator_families, iterators, 2, &err);
+  CheckNoError(err);
+  uint64_t snapshots = 0;
+  CheckCondition(rocksdb_property_int(view, "rocksdb.num-snapshots", &snapshots) == 0);
+  CheckCondition(snapshots == 1);
+  rocksdb_writebatch_wi_t* indexed = rocksdb_writebatch_wi_create(0, 1);
+  rocksdb_iterator_t* iterator = rocksdb_writebatch_wi_create_iterator_with_base(indexed, iterators[0]);
+  rocksdb_iter_destroy(iterators[1]);
+  CheckCondition(rocksdb_property_int(view, "rocksdb.num-snapshots", &snapshots) == 0);
+  CheckCondition(snapshots == 1);
+  rocksdb_iter_seek_to_first(iterator);
+  CheckIter(iterator, "key", "value");
+  rocksdb_iter_destroy(iterator);
+  rocksdb_writebatch_wi_destroy(indexed);
+  CheckCondition(rocksdb_property_int(view, "rocksdb.num-snapshots", &snapshots) == 0);
+  CheckCondition(snapshots == 0);
+  rocksdb_put(view, wo, "next", 4, "other", 5, &err);
+  CheckNoError(err);
+  /* Both single-iterator factories must also compose with indexed batches. */
+  for (int factory = 0; factory != 2; ++factory) {
+    rocksdb_iterator_t* base = factory == 0
+        ? rocksdb_create_iterator(view, ro)
+        : rocksdb_create_iterator_cf(view, ro, cf);
+    indexed = rocksdb_writebatch_wi_create(0, 1);
+    rocksdb_writebatch_wi_put(indexed, "z", 1, "indexed", 7, &err);
+    CheckNoError(err);
+    iterator = rocksdb_writebatch_wi_create_iterator_with_base(indexed, base);
+    rocksdb_iter_seek_to_first(iterator);
+    CheckIter(iterator, "key", "value");
+    rocksdb_iter_next(iterator);
+    CheckIter(iterator, "next", "other");
+    rocksdb_iter_next(iterator);
+    CheckIter(iterator, "z", "indexed");
+    rocksdb_iter_prev(iterator);
+    CheckIter(iterator, "next", "other");
+    rocksdb_iter_prev(iterator);
+    CheckIter(iterator, "key", "value");
+    rocksdb_iter_destroy(iterator);
+    rocksdb_writebatch_wi_destroy(indexed);
+  }
+  rocksdb_put(view, wo, "empty", 5, "", 0, &err);
+  CheckNoError(err);
+  const char* keys[2] = {"empty", "absent"};
+  size_t key_sizes[2] = {5, 6}, value_sizes[2];
+  char* values[2]; char* errors[2] = {NULL, NULL};
+  rocksdb_multi_get(view, ro, 2, keys, key_sizes, values, value_sizes, errors);
+  CheckNoError(errors[0]); CheckNoError(errors[1]);
+  CheckCondition(values[0] != NULL && value_sizes[0] == 0);
+  CheckCondition(values[1] == NULL && value_sizes[1] == 0);
+  rocksdb_free(values[0]);
+  rocksdb_column_family_handle_destroy(cf);
+  rocksdb_close(view);
+  rocksdb_ttl_close(ttl);
+  rocksdb_destroy_db(options, path, &err);
+  CheckNoError(err);
+  rocksdb_transactiondb_options_t* dbo = rocksdb_transactiondb_options_create();
+  rocksdb_transaction_options_t* txo = rocksdb_transaction_options_create();
+  rocksdb_transactiondb_t* db = rocksdb_transactiondb_open(options, dbo, path, &err);
+  CheckNoError(err);
+  rocksdb_transaction_t* tx = rocksdb_transaction_begin(db, wo, txo, NULL);
+  rocksdb_writeoptions_t* copied_options = rocksdb_transaction_get_write_options(tx);
+  rocksdb_writeoptions_t* first_options = rocksdb_transaction_get_write_options_view(tx);
+  rocksdb_writeoptions_t* second_options = rocksdb_transaction_get_write_options_view(tx);
+  rocksdb_writeoptions_set_sync(first_options, 1);
+  CheckCondition(rocksdb_writeoptions_get_sync(second_options) == 1);
+  CheckCondition(rocksdb_writeoptions_get_sync(copied_options) == 0);
+  rocksdb_writeoptions_destroy(copied_options);
+  rocksdb_writeoptions_destroy(first_options);
+  rocksdb_writeoptions_destroy(second_options);
+  rocksdb_writebatch_t* copied_batch = rocksdb_transaction_get_commit_time_writebatch(tx);
+  rocksdb_writebatch_t* first_batch = rocksdb_transaction_get_commit_time_writebatch_view(tx);
+  rocksdb_writebatch_t* second_batch = rocksdb_transaction_get_commit_time_writebatch_view(tx);
+  rocksdb_writebatch_put(first_batch, "commit-key", 10, "value", 5, &err);
+  CheckNoError(err);
+  CheckCondition(rocksdb_writebatch_count(second_batch) == 1);
+  CheckCondition(rocksdb_writebatch_count(copied_batch) == 0);
+  rocksdb_writebatch_destroy(copied_batch);
+  rocksdb_writebatch_destroy(first_batch);
+  rocksdb_writebatch_destroy(second_batch);
+  /* Destroying the borrowed wrappers must not destroy the native transaction. */
+  rocksdb_transaction_put(tx, "still-alive", 11, "value", 5, &err);
+  CheckNoError(err);
+  rocksdb_transaction_destroy(tx);
+  rocksdb_transaction_t* holder = rocksdb_transaction_begin(db, wo, txo, NULL);
+  rocksdb_transaction_options_set_lock_timeout(txo, 0);
+  rocksdb_transaction_t* waiter = rocksdb_transaction_begin(db, wo, txo, NULL);
+  char blocked_key[320];
+  memset(blocked_key, 'x', sizeof(blocked_key));
+  blocked_key[100] = 0;
+  rocksdb_transaction_put(holder, blocked_key, sizeof(blocked_key), "v", 1, &err);
+  CheckNoError(err);
+  rocksdb_transaction_put(waiter, blocked_key, sizeof(blocked_key), "v", 1, &err);
+  CheckCondition(err != NULL && strstr(err, "Operation timed out") != NULL);
+  Free(&err);
+  uint32_t waiting_cf; size_t waiting_key_size, waiting_count;
+  char* waiting_key = NULL;
+  uint64_t* waiting_ids = rocksdb_transaction_get_waiting_txns_with_key(
+      waiter, &waiting_cf, &waiting_key, &waiting_key_size, &waiting_count);
+  CheckCondition(waiting_cf == 0 && waiting_key_size == sizeof(blocked_key));
+  CheckCondition(memcmp(waiting_key, blocked_key, sizeof(blocked_key)) == 0);
+  rocksdb_free(waiting_key);
+  rocksdb_transaction_waiting_txns_destroy(waiting_ids);
+  char legacy_key[16];
+  waiting_ids = rocksdb_transaction_get_waiting_txns(
+      waiter, &waiting_cf, legacy_key, sizeof(legacy_key), &waiting_count);
+  CheckCondition(legacy_key[0] == 'x' && legacy_key[15] == 0);
+  rocksdb_transaction_waiting_txns_destroy(waiting_ids);
+  rocksdb_transaction_destroy(waiter);
+  rocksdb_transaction_destroy(holder);
+  rocksdb_transactiondb_put(db, wo, "alive", 5, "value", 5, &err);
+  CheckNoError(err);
+  rocksdb_transactiondb_close(db);
+  rocksdb_destroy_db(options, path, &err);
+  CheckNoError(err);
+  rocksdb_transaction_options_destroy(txo);
+  rocksdb_transactiondb_options_destroy(dbo);
+  rocksdb_writeoptions_destroy(wo);
+  rocksdb_readoptions_destroy(ro);
+  rocksdb_options_destroy(options);
+}
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -2124,6 +2393,9 @@ int main(int argc, char** argv) {
 
   snprintf(dbpathname, sizeof(dbpathname),
            "%s/rocksdb_c_test-%" PRIu64 "-dbpath", GetTempDir(), GetTestId());
+
+  TestTransactionDbDispatch();
+  TestAdditionalNativeViews();
 
   StartPhase("create_objects");
   cmp = rocksdb_comparator_create(NULL, CmpDestroy, CmpCompare, CmpName);

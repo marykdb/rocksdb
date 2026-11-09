@@ -4218,6 +4218,12 @@ extern ROCKSDB_LIBRARY_API int rocksdb_transactiondb_property_int(
 extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_transactiondb_get_base_db(
     rocksdb_transactiondb_t* txn_db);
 
+/* Returns an owned wrapper borrowing the TransactionDB itself, preserving its
+ * virtual dispatch (including locks and prepared-write visibility). Release
+ * with rocksdb_close before closing txn_db. This does not return the base DB. */
+extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_transactiondb_get_db(
+    rocksdb_transactiondb_t* txn_db);
+
 extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_close_base_db(
     rocksdb_t* base_db);
 
@@ -4227,6 +4233,10 @@ extern ROCKSDB_LIBRARY_API rocksdb_transaction_t* rocksdb_transaction_begin(
     const rocksdb_transaction_options_t* txn_options,
     rocksdb_transaction_t* old_txn);
 
+/* Returned transaction wrappers borrow their engine objects. Recovery-created
+ * objects are owned by this C DB handle until rocksdb_transactiondb_close,
+ * including after commit/rollback. Destroy each wrapper with
+ * rocksdb_transaction_destroy and free the returned array with rocksdb_free. */
 extern ROCKSDB_LIBRARY_API rocksdb_transaction_t**
 rocksdb_transactiondb_get_prepared_transactions(rocksdb_transactiondb_t* txn_db,
                                                 size_t* cnt);
@@ -4546,6 +4556,12 @@ rocksdb_optimistictransactiondb_open_column_families_with_otxn_db_options(
 
 extern ROCKSDB_LIBRARY_API rocksdb_t*
 rocksdb_optimistictransactiondb_get_base_db(
+    rocksdb_optimistictransactiondb_t* otxn_db);
+
+/* Returns an owned wrapper borrowing the OptimisticTransactionDB itself.
+ * Release with rocksdb_close before closing otxn_db. The explicit get_base_db
+ * API remains available for callers intentionally accessing the base DB. */
+extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_optimistictransactiondb_get_db(
     rocksdb_optimistictransactiondb_t* otxn_db);
 
 extern ROCKSDB_LIBRARY_API void rocksdb_optimistictransactiondb_close_base_db(
@@ -6819,6 +6835,10 @@ rocksdb_ttl_create_column_family(rocksdb_ttl_t* db,
 extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_ttl_get_base_db(
     rocksdb_ttl_t* db);
 
+/* Returns an owned wrapper borrowing DBWithTTL itself, preserving timestamp
+ * encoding/decoding. Release with rocksdb_close before closing db. */
+extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_ttl_get_db(rocksdb_ttl_t* db);
+
 extern ROCKSDB_LIBRARY_API void rocksdb_ttl_close(rocksdb_ttl_t* db);
 
 extern ROCKSDB_LIBRARY_API void rocksdb_drop_column_families(
@@ -7108,6 +7128,10 @@ rocksdb_env_lower_with_priority_thread_pool_cpu_priority(rocksdb_env_t* env,
 
 extern ROCKSDB_LIBRARY_API int32_t
 rocksdb_env_get_thread_pool_queue_length(rocksdb_env_t* env);
+
+extern ROCKSDB_LIBRARY_API int32_t
+rocksdb_env_get_thread_pool_queue_length_with_priority(rocksdb_env_t* env,
+                                                       int priority);
 
 extern ROCKSDB_LIBRARY_API void rocksdb_env_inc_background_threads_if_needed(
     rocksdb_env_t* env, int num, int priority);
@@ -7513,6 +7537,11 @@ rocksdb_transactiondb_get_transaction_by_name(rocksdb_transactiondb_t* txn_db,
 extern ROCKSDB_LIBRARY_API rocksdb_writeoptions_t*
 rocksdb_transaction_get_write_options(rocksdb_transaction_t* txn);
 
+/* Live borrowed view; destroy the C wrapper with rocksdb_writeoptions_destroy
+ * before closing or reusing txn. The original getter still returns a copy. */
+extern ROCKSDB_LIBRARY_API rocksdb_writeoptions_t*
+rocksdb_transaction_get_write_options_view(rocksdb_transaction_t* txn);
+
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_set_write_options(
     rocksdb_transaction_t* txn, rocksdb_writeoptions_t* options);
 
@@ -7577,6 +7606,11 @@ extern ROCKSDB_LIBRARY_API void rocksdb_transaction_destroy_wrapper(
 
 extern ROCKSDB_LIBRARY_API rocksdb_writebatch_t*
 rocksdb_transaction_get_commit_time_writebatch(rocksdb_transaction_t* txn);
+
+/* Live borrowed view; destroy the C wrapper with rocksdb_writebatch_destroy
+ * before closing or reusing txn. The original getter still returns a copy. */
+extern ROCKSDB_LIBRARY_API rocksdb_writebatch_t*
+rocksdb_transaction_get_commit_time_writebatch_view(rocksdb_transaction_t* txn);
 
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_snapshot_destroy(
     const rocksdb_snapshot_t* snapshot);
@@ -7695,6 +7729,13 @@ extern ROCKSDB_LIBRARY_API void rocksdb_deadlock_paths_destroy(
 ROCKSDB_LIBRARY_API uint64_t* rocksdb_transaction_get_waiting_txns(
     rocksdb_transaction_t* txn, uint32_t* column_family_id, char* key,
     size_t key_len, size_t* num_txns);
+
+/* Length-aware output variant. Release *key with rocksdb_free and the returned
+ * IDs with rocksdb_transaction_waiting_txns_destroy. No key truncation occurs. */
+extern ROCKSDB_LIBRARY_API uint64_t*
+rocksdb_transaction_get_waiting_txns_with_key(
+    rocksdb_transaction_t* txn, uint32_t* column_family_id, char** key,
+    size_t* key_len, size_t* num_txns);
 
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_waiting_txns_destroy(
     uint64_t* transaction_ids);

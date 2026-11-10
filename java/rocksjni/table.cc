@@ -90,7 +90,8 @@ jlong Java_org_rocksdb_BlockBasedTableConfig_newTableFactoryHandle(
   if (options.no_block_cache) {
     options.block_cache = nullptr;
   } else {
-    if (jblock_cache_handle > 0) {
+    // Pointer handles can have their sign bit set; only zero denotes absence.
+    if (jblock_cache_handle != 0) {
       std::shared_ptr<ROCKSDB_NAMESPACE::Cache>* pCache =
           reinterpret_cast<std::shared_ptr<ROCKSDB_NAMESPACE::Cache>*>(
               jblock_cache_handle);
@@ -109,7 +110,7 @@ jlong Java_org_rocksdb_BlockBasedTableConfig_newTableFactoryHandle(
       options.block_cache = nullptr;
     }
   }
-  if (jpersistent_cache_handle > 0) {
+  if (jpersistent_cache_handle != 0) {
     std::shared_ptr<ROCKSDB_NAMESPACE::PersistentCache>* pCache =
         reinterpret_cast<std::shared_ptr<ROCKSDB_NAMESPACE::PersistentCache>*>(
             jpersistent_cache_handle);
@@ -125,7 +126,7 @@ jlong Java_org_rocksdb_BlockBasedTableConfig_newTableFactoryHandle(
   options.optimize_filters_for_memory =
       static_cast<bool>(joptimize_filters_for_memory);
   options.use_delta_encoding = static_cast<bool>(juse_delta_encoding);
-  if (jfilter_policy_handle > 0) {
+  if (jfilter_policy_handle != 0) {
     std::shared_ptr<ROCKSDB_NAMESPACE::FilterPolicy>* pFilterPolicy =
         reinterpret_cast<std::shared_ptr<ROCKSDB_NAMESPACE::FilterPolicy>*>(
             jfilter_policy_handle);

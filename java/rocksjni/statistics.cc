@@ -59,7 +59,8 @@ jlong Java_org_rocksdb_Statistics_newStatistics___3BJ(
     jlong jother_statistics_handle) {
   std::shared_ptr<ROCKSDB_NAMESPACE::Statistics>* pSptr_other_statistics =
       nullptr;
-  if (jother_statistics_handle > 0) {
+  // Pointer handles can have their sign bit set; only zero denotes absence.
+  if (jother_statistics_handle != 0) {
     pSptr_other_statistics =
         reinterpret_cast<std::shared_ptr<ROCKSDB_NAMESPACE::Statistics>*>(
             jother_statistics_handle);
@@ -106,7 +107,7 @@ jlong Java_org_rocksdb_Statistics_newStatistics___3BJ(
  */
 void Java_org_rocksdb_Statistics_disposeInternalJni(JNIEnv*, jclass,
                                                     jlong jhandle) {
-  if (jhandle > 0) {
+  if (jhandle != 0) {
     auto* pSptr_statistics =
         reinterpret_cast<std::shared_ptr<ROCKSDB_NAMESPACE::Statistics>*>(
             jhandle);
